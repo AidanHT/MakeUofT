@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>MediaPipe Pose Analysis</title>
+    <style>
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .results {
+            margin-top: 20px;
+        }
+
+        #outputCanvas {
+            max-width: 100%;
+            margin-top: 20px;
+        }
+
+        .status {
+            margin: 20px 0;
+            padding: 10px;
+            border-radius: 4px;
+        }
+
+        .success {
+            background: #e6ffe6;
+        }
+
+        .error {
+            background: #ffe6e6;
+        }
+
+        .controls {
+            display: flex;
+            gap: 10px;
+            margin: 20px 0;
+            align-items: center;
+            justify-content: center;
+        }
+
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background: #45a049;
+        }
+
+        button:disabled {
+            background: #cccccc;
+            cursor: not-allowed;
+        }
+
+        .current-image {
+            text-align: center;
+            margin: 10px 0;
+            font-size: 18px;
+            font-weight: bold;
+        }
+
+        #imageList {
+            margin: 20px 0;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1>MediaPipe Pose Analysis</h1>
+
+        <div class="controls">
+            <button id="prevBtn">← Previous</button>
+            <button id="refreshBtn">↻ Refresh Analysis</button>
+            <button id="nextBtn">Next →</button>
+            <button id="saveBtn">💾 Save Results</button>
+        </div>
+
+        <div id="currentImage" class="current-image">No image selected</div>
+        <div id="status" class="status"></div>
+
+        <div class="results">
+            <canvas id="outputCanvas"></canvas>
+            <pre id="poseData"></pre>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
+
+    <script>
+        let pose;
+        let currentImageIndex = -1;
+        let imagesList = [];
+        let currentImage = null;
+
+        async function initializePose() {
+            pose = new Pose({
+                locateFile: (file) => {
+                    return `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`;
+                }
+            });
+
+            pose.setOptions({
+                modelComplexity: 2,
+                smoothLandmarks: true,
+                enableSegmentation: false,
+                smoothSegmentation: false,
+                minDetectionConfidence: 0.3,
+                minTrackingConfidence: 0.3
+            });
+
+            pose.onResults(onResults);
+        }
+
+        async function loadImageFromPath(imagePath) {
+            return new Promise((resolve, reject) => {
+                const img = new Image();
+                img.crossOrigin = "anonymous";
+                img.onload = () => resolve(img);
+                img.onerror = reject;
+                img.src = imagePath;
+            });
+        }
+
+        let currentImageName = '';
+
+        function onResults(results) {
+            const canvas = document.getElementById('outputCanvas');
+            const ctx = canvas.getContext('2d');
+
+            // Set canvas dimensions to match the image
+            canvas.width = results.image.width;
+            canvas.height = results.image.height;
+
+            // Draw the image
+            ctx.drawImage(results.image, 0, 0);
+
+            if (results.poseLandmarks) {
+                // Store the pose data for saving later
+                window.currentPoseData = {
+                    landmarks: results.poseLandmarks.map(landmark => ({
+                        x: landmark.x,
+                        y: landmark.y,
+                        z: landmark.z,
+                        visibility: landmark.visibility
+                    }))
+                };
+
+                // Draw pose landmarks
+                ctx.save();
+
+                // Draw connectors
+                ctx.lineWidth = 2;
+
+                // Draw pose connections
+                function drawConnection(landmarks, start, end, color) {
+                    const startPoint = landmarks[start];
+                    const endPoint = landmarks[end];
+
+                    if (startPoint.visibility > 0.3 && endPoint.visibility > 0.3) {
+                        ctx.beginPath();
+                        ctx.moveTo(startPoint.x * canvas.width, startPoint.y * canvas.height);
+                        ctx.lineTo(endPoint.x * canvas.width, endPoint.y * canvas.height);
+                        ctx.strokeStyle = color;
+                        ctx.stroke();
+                    }
+                }
+
+                const landmarks = results.poseLandmarks;
+
+                // Draw face connections
+                const faceColor = '#FF0000';
+                drawConnection(landmarks, 0, 9, faceColor);
+                drawConnection(landmarks, 0, 10, faceColor);
+                drawConnection(landmarks, 0, 1, faceColor);
+                drawConnection(landmarks, 1, 2, faceColor);
+                drawConnection(landmarks, 2, 3, faceColor);
+                drawConnection(landmarks, 3, 7, faceColor);
+                drawConnection(landmarks, 0, 4, faceColor);
+                drawConnection(landmarks, 4, 5, faceColor);
+                drawConnection(landmarks, 5, 6, faceColor);
+                drawConnection(landmarks, 6, 8, faceColor);
+
+                // Draw upper body
+                const upperBodyColor = '#00FF00';
+                drawConnection(landmarks, 11, 12, upperBodyColor);
+                drawConnection(landmarks, 11, 13, upperBodyColor);
+                drawConnection(landmarks, 13, 15, upperBodyColor);
+                drawConnection(landmarks, 15, 17, upperBodyColor);
+                drawConnection(landmarks, 15, 19, upperBodyColor);
+                drawConnection(landmarks, 15, 21, upperBodyColor);
+                drawConnection(landmarks, 12, 14, upperBodyColor);
+                drawConnection(landmarks, 14, 16, upperBodyColor);
+                drawConnection(landmarks, 16, 18, upperBodyColor);
+                drawConnection(landmarks, 16, 20, upperBodyColor);
+                drawConnection(landmarks, 16, 22, upperBodyColor);
+
+                // Draw torso
+                const torsoColor = '#0000FF';
+                drawConnection(landmarks, 11, 23, torsoColor);
+                drawConnection(landmarks, 12, 24, torsoColor);
+                drawConnection(landmarks, 23, 24, torsoColor);
+
+                // Draw lower body
+                const lowerBodyColor = '#FFFF00';
+                drawConnection(landmarks, 23, 25, lowerBodyColor);
+                drawConnection(landmarks, 25, 27, lowerBodyColor);
+                drawConnection(landmarks, 27, 29, lowerBodyColor);
+                drawConnection(landmarks, 27, 31, lowerBodyColor);
+                drawConnection(landmarks, 24, 26, lowerBodyColor);
+                drawConnection(landmarks, 26, 28, lowerBodyColor);
+                drawConnection(landmarks, 28, 30, lowerBodyColor);
+                drawConnection(landmarks, 28, 32, lowerBodyColor);
+
+                // Draw landmarks
+                landmarks.forEach((landmark) => {
+                    if (landmark.visibility > 0.3) {
+                        ctx.beginPath();
+                        ctx.arc(
+                            landmark.x * canvas.width,
+                            landmark.y * canvas.height,
+                            3,
+                            0,
+                            2 * Math.PI
+                        );
+                        ctx.fillStyle = '#FFFFFF';
+                        ctx.fill();
+                        ctx.strokeStyle = '#000000';
+                        ctx.stroke();
+                    }
+                });
+
+                ctx.restore();
+                updateStatus(`✓ Analyzed pose for ${currentImageName}`, 'success');
+            } else {
+                updateStatus(`✗ No pose detected in ${currentImageName}`, 'error');
+            }
+        }
+
+        async function processImage(imagePath, imageName) {
+            try {
+                currentImageName = imageName;
+                const img = await loadImageFromPath(imagePath);
+                currentImage = img;
+
+                // First, display the image
+                const canvas = document.getElementById('outputCanvas');
+                const ctx = canvas.getContext('2d');
+                canvas.width = img.width;
+                canvas.height = img.height;
+                ctx.drawImage(img, 0, 0);
+
+                // Then analyze the pose
+                await pose.send({ image: img });
+                return true;
+            } catch (error) {
+                updateStatus(`Error processing ${imageName}: ${error.message}`, 'error');
+                return false;
+            }
+        }
+
+        async function listImages() {
+            try {
+                const response = await fetch('http://localhost:3000/list-photos');
+                const data = await response.json();
+
+                if (!data.success) {
+                    throw new Error(data.error || 'Failed to list images');
+                }
+
+                return data.files;
+            } catch (error) {
+                updateStatus('Error listing images: ' + error.message, 'error');
+                return [];
+            }
+        }
+
+        // Navigation functions
+        async function loadNextImage() {
+            if (currentImageIndex < imagesList.length - 1) {
+                currentImageIndex++;
+                await processCurrentImage();
+                updateNavigationButtons();
+            }
+        }
+
+        async function loadPreviousImage() {
+            if (currentImageIndex > 0) {
+                currentImageIndex--;
+                await processCurrentImage();
+                updateNavigationButtons();
+            }
+        }
+
+        async function refreshCurrentImage() {
+            if (currentImageIndex >= 0 && currentImageIndex < imagesList.length) {
+                await processCurrentImage();
+            }
+        }
+
+        function updateNavigationButtons() {
+            const prevBtn = document.getElementById('prevBtn');
+            const nextBtn = document.getElementById('nextBtn');
+            const refreshBtn = document.getElementById('refreshBtn');
+            const saveBtn = document.getElementById('saveBtn');
+
+            prevBtn.disabled = currentImageIndex <= 0;
+            nextBtn.disabled = currentImageIndex >= imagesList.length - 1;
+            refreshBtn.disabled = currentImageIndex === -1;
+            saveBtn.disabled = currentImageIndex === -1 || !window.currentPoseData;
+
+            const currentImageDiv = document.getElementById('currentImage');
+            if (currentImageIndex >= 0 && currentImageIndex < imagesList.length) {
+                currentImageDiv.textContent = `Current Image: ${imagesList[currentImageIndex]}`;
+            } else {
+                currentImageDiv.textContent = 'No image selected';
+            }
+        }
+
+        async function processCurrentImage() {
+            if (currentImageIndex >= 0 && currentImageIndex < imagesList.length) {
+                const imageName = imagesList[currentImageIndex];
+                updateStatus(`Processing ${imageName}...`);
+                await processImage(`photos/${imageName}`, imageName);
+            }
+        }
+
+        function updateStatus(message, type = 'success') {
+            const status = document.getElementById('status');
+            status.textContent = message;
+            status.className = `status ${type}`;
+        }
+
+        async function initialize() {
+            updateStatus('Initializing pose detection...');
+            await initializePose();
+
+            updateStatus('Loading image list...');
+            imagesList = await listImages();
+
+            if (imagesList.length > 0) {
+                currentImageIndex = 0;
+                updateStatus('Loading first image...');
+                await processCurrentImage();
+            } else {
+                updateStatus('No images found in the photos directory', 'error');
+            }
+
+            updateNavigationButtons();
+        }
+
+        async function saveCurrentResults() {
+            if (!currentImage || !window.currentPoseData) {
+                updateStatus('No pose data available to save', 'error');
+                return;
+            }
+
+            try {
+                const imageName = imagesList[currentImageIndex];
+                const baseFileName = imageName.split('.')[0];
+
+                // Save visualization
+                const canvas = document.getElementById('outputCanvas');
+                const imageData = canvas.toDataURL('image/png');
+                const visualizationData = imageData.split(',')[1]; // Remove the data URL prefix
+
+                // Save pose data
+                const poseData = JSON.stringify(window.currentPoseData, null, 2);
+
+                const response = await fetch('http://localhost:3000/save-results', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        baseFileName,
+                        visualizationData,
+                        poseData
+                    })
+                });
+
+                const result = await response.json();
+                if (result.success) {
+                    updateStatus(`✓ Saved results for ${imageName}`, 'success');
+                } else {
+                    throw new Error(result.error || 'Failed to save results');
+                }
+            } catch (error) {
+                updateStatus(`Error saving results: ${error.message}`, 'error');
+            }
+        }
+
+        // Set up event listeners
+        document.getElementById('prevBtn').addEventListener('click', loadPreviousImage);
+        document.getElementById('nextBtn').addEventListener('click', loadNextImage);
+        document.getElementById('refreshBtn').addEventListener('click', refreshCurrentImage);
+        document.getElementById('saveBtn').addEventListener('click', saveCurrentResults);
+
+        // Initialize
+        initialize();
+    </script>
+</body>
+
+</html>

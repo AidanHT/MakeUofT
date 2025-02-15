@@ -1,0 +1,17 @@
+{
+    "name": "photo-pose-analyzer",
+    "version": "1.0.0",
+    "type": "module",
+    "description": "Analyzes poses in static photos using MediaPipe",
+    "main": "server.js",
+    "dependencies": {
+        "@mediapipe/pose": "~0.5.1675469404",
+        "@mediapipe/drawing_utils": "~0.3.1675466124",
+        "canvas": "^2.11.2",
+        "express": "^4.18.2",
+        "cors": "^2.8.5"
+    },
+    "scripts": {
+        "start": "node server.js"
+    }
+}
