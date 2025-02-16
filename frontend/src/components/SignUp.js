@@ -71,8 +71,12 @@ const SignUp = () => {
         <div className="signup-container">
             <div className="signup-content">
                 <div className="signup-box">
-                    <h1>Create Account</h1>
-                    <p className="subtitle">Join our community and start your learning journey</p>
+                    <div className="signup-header">
+                        <h2>Join MindMaxxing</h2>
+                        <p className="subtitle">
+                            Start your AI-powered fitness journey today
+                        </p>
+                    </div>
 
                     {error && <div className="error-message">{error}</div>}
 

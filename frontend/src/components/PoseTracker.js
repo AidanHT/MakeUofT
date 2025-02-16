@@ -3,6 +3,7 @@ import Webcam from 'react-webcam';
 import { Camera } from '@mediapipe/camera_utils';
 import { Pose } from '@mediapipe/pose';
 import './PoseTracker.css';
+import io from 'socket.io-client';
 
 const PoseTracker = ({ userPreferences }) => {
     const webcamRef = useRef(null);
@@ -173,6 +174,9 @@ const PoseTracker = ({ userPreferences }) => {
     const onResults = useCallback((results) => {
         if (!canvasRef.current || !results.poseLandmarks) return;
 
+        // Only process pose detection if session is started and not paused
+        if (!isSessionStarted || isPaused) return;
+
         // Throttle frame processing
         const now = performance.now();
         if (now - lastProcessedTime.current < FRAME_INTERVAL) return;
@@ -189,8 +193,8 @@ const PoseTracker = ({ userPreferences }) => {
             canvasElement.height = videoHeight;
         }
 
-        // Calculate pose accuracy if we have a selected pose
-        if (selectedPose?.landmarks && !isPaused) {
+        // Calculate pose accuracy if we have a selected pose and session is started
+        if (selectedPose?.landmarks && isSessionStarted && !isPaused) {
             const accuracyData = calculatePoseAccuracy(results.poseLandmarks, selectedPose);
             setPoseAccuracy(accuracyData.total);
             setSegmentAccuracies(accuracyData.segments);
@@ -275,7 +279,7 @@ const PoseTracker = ({ userPreferences }) => {
 
             canvasCtx.restore();
         }
-    }, [selectedPose, isPaused, calculatePoseAccuracy]);
+    }, [selectedPose, isPaused, calculatePoseAccuracy, isSessionStarted]);
 
     useEffect(() => {
         const loadPoses = async () => {
@@ -377,11 +381,33 @@ const PoseTracker = ({ userPreferences }) => {
 
     // Handler for starting the session
     const handleStartSession = useCallback(() => {
+        // Reset game state
+        setGameState({
+            level: 1,
+            totalScore: 0,
+            currentStreak: 0,
+            achievements: [],
+            highestAccuracy: 0
+        });
+
+        // Initialize or reinitialize WebSocket if needed
+        if (!wsConnection) {
+            const ws = new WebSocket('ws://localhost:8000/ws/pose-feedback');
+            ws.onopen = () => {
+                console.log('Connected to feedback server');
+                setWsConnection(ws);
+            };
+            ws.onerror = (error) => {
+                console.error('WebSocket error:', error);
+                setError('Failed to connect to the feedback server. Please try again.');
+            };
+        }
+
         setIsSessionStarted(true);
         setIsPaused(false);
         setTimeRemaining(POSE_DURATION);
         setTotalPosesCompleted(0);
-    }, []);
+    }, [wsConnection]);
 
     // Handler for pausing/resuming the session
     const handlePauseResume = useCallback(() => {
@@ -511,8 +537,241 @@ const PoseTracker = ({ userPreferences }) => {
         }
     }, [poseAccuracy, segmentAccuracies, selectedPose, wsConnection]);
 
+    // Add dynamic accuracy class
+    const getAccuracyClass = useCallback((accuracy) => {
+        if (accuracy >= 95) return 'perfect';
+        if (accuracy >= 80) return 'high';
+        return '';
+    }, []);
+
+    // Add sound effects with error handling
+    const playSound = useCallback((type) => {
+        const soundPaths = {
+            achievement: `${process.env.PUBLIC_URL}/sounds/achievement.mp3`,
+            levelUp: `${process.env.PUBLIC_URL}/sounds/level-up.mp3`,
+            score: `${process.env.PUBLIC_URL}/sounds/score.mp3`,
+            perfect: `${process.env.PUBLIC_URL}/sounds/perfect.mp3`
+        };
+
+        const path = soundPaths[type];
+        if (!path) return;
+
+        try {
+            const audio = new Audio(path);
+            audio.play().catch(err => {
+                console.warn(`Sound playback failed for ${type}:`, err);
+                // Continue without sound if file is missing or playback fails
+            });
+        } catch (err) {
+            console.warn(`Failed to create audio for ${type}:`, err);
+            // Continue without sound if audio creation fails
+        }
+    }, []);
+
+    // Add missing game state variables
+    const [gameState, setGameState] = useState({
+        level: 1,
+        totalScore: 0,
+        currentStreak: 0,
+        achievements: [],
+        highestAccuracy: 0
+    });
+    const [showAchievement, setShowAchievement] = useState(null);
+    const [scorePopup, setScorePopup] = useState(null);
+    const [accuracyRating, setAccuracyRating] = useState(null);
+    const [gameFeedback, setGameFeedback] = useState(null);
+
+    // Add handlers for game mechanics
+    const handleNewScore = useCallback((score, x, y) => {
+        setScorePopup({ score, x, y });
+        setTimeout(() => setScorePopup(null), 1000);
+    }, []);
+
+    const handleNewAchievement = useCallback((achievement) => {
+        setShowAchievement(achievement);
+        setTimeout(() => setShowAchievement(null), 3000);
+    }, []);
+
+    // Update the websocket message handler
+    useEffect(() => {
+        if (wsConnection) {
+            wsConnection.onmessage = (event) => {
+                try {
+                    const feedback = JSON.parse(event.data);
+                    console.log('Received feedback:', feedback); // Debug log
+
+                    // Update game state with smooth animations
+                    setGameState(prev => ({
+                        ...prev,
+                        level: feedback.level || prev.level,
+                        totalScore: feedback.total_score || prev.totalScore,
+                        currentStreak: feedback.current_streak || prev.currentStreak,
+                        highestAccuracy: Math.max(prev.highestAccuracy, poseAccuracy)
+                    }));
+
+                    // Handle score popup with position randomization
+                    if (feedback.score) {
+                        const rect = canvasRef.current?.getBoundingClientRect();
+                        if (rect) {
+                            const randomOffset = Math.random() * 100 - 50;
+                            handleNewScore(
+                                feedback.score,
+                                rect.right - 100 + randomOffset,
+                                rect.top + 50 + Math.random() * 50
+                            );
+                            playSound('score');
+                        }
+                    }
+
+                    // Handle accuracy rating
+                    if (feedback.accuracy_rating) {
+                        setAccuracyRating(feedback.accuracy_rating);
+                        if (feedback.accuracy_rating === 'PERFECT') {
+                            playSound('perfect');
+                        }
+                    }
+
+                    // Handle level up
+                    if (feedback.level_up) {
+                        handleNewAchievement(`🎉 Level Up! You've reached level ${feedback.level}!`);
+                        playSound('levelUp');
+                    }
+
+                    // Handle achievements
+                    if (feedback.new_achievements?.length > 0) {
+                        feedback.new_achievements.forEach(achievement => {
+                            handleNewAchievement(achievement);
+                            playSound('achievement');
+                        });
+                    }
+
+                    // Update game feedback
+                    if (feedback.feedback) {
+                        setGameFeedback(feedback.feedback);
+                    }
+
+                } catch (error) {
+                    console.error('Error processing websocket message:', error);
+                }
+            };
+        }
+    }, [wsConnection, playSound, handleNewAchievement, handleNewScore, poseAccuracy, canvasRef]);
+
+    // Add streak bonus calculation
+    const calculateStreakBonus = useCallback((streak) => {
+        if (streak >= 10) return 3.0; // Triple points
+        if (streak >= 5) return 2.0;  // Double points
+        if (streak >= 3) return 1.5;  // 50% bonus
+        return 1.0;
+    }, []);
+
+    // Add pose difficulty bonus
+    const calculatePoseDifficulty = useCallback((poseName) => {
+        const difficultyMap = {
+            'mountain-pose': 1.0,
+            'tree-pose': 1.2,
+            'warrior-pose': 1.3,
+            'triangle-pose': 1.4,
+            'crow-pose': 1.5
+        };
+        return difficultyMap[poseName] || 1.0;
+    }, []);
+
+    // Calculate final score with bonuses
+    const calculateFinalScore = useCallback((baseScore, streak, poseName) => {
+        const streakBonus = calculateStreakBonus(streak);
+        const difficultyBonus = calculatePoseDifficulty(poseName);
+        return Math.round(baseScore * streakBonus * difficultyBonus);
+    }, [calculateStreakBonus, calculatePoseDifficulty]);
+
+    // Add new state for sensor data
+    const [sensorData, setSensorData] = useState({
+        heartRate: 0,
+        temperature: 0,
+        acceleration: { x: 0, y: 0, z: 0 },
+        gyroscope: { x: 0, y: 0, z: 0 }
+    });
+
+    // Add Socket.IO connection for Arduino data
+    useEffect(() => {
+        const arduinoSocket = io('http://localhost:3001');
+
+        arduinoSocket.on('connect', () => {
+            console.log('Connected to Arduino server');
+        });
+
+        arduinoSocket.on('heartRate', (data) => {
+            setSensorData(prev => ({ ...prev, heartRate: data.value }));
+        });
+
+        arduinoSocket.on('temperature', (data) => {
+            setSensorData(prev => ({ ...prev, temperature: data.value }));
+        });
+
+        arduinoSocket.on('motion', (data) => {
+            setSensorData(prev => ({
+                ...prev,
+                acceleration: data.acceleration,
+                gyroscope: data.gyroscope
+            }));
+        });
+
+        arduinoSocket.on('error', (error) => {
+            console.error('Arduino socket error:', error);
+        });
+
+        return () => {
+            arduinoSocket.disconnect();
+        };
+    }, []);
+
     return (
         <div className="pose-tracker">
+            {/* Game Overlay */}
+            <div className="game-overlay">
+                <div className="game-stats">
+                    <div className="game-stat">
+                        <span className="stat-label">Level</span>
+                        <span className="stat-value">{gameState.level}</span>
+                        <div className="level-progress">
+                            <div
+                                className="level-progress-fill"
+                                style={{ width: `${(gameState.totalScore % 1000) / 10}%` }}
+                            />
+                        </div>
+                    </div>
+                    <div className="game-stat">
+                        <span className="stat-label">Score</span>
+                        <span className="stat-value">{gameState.totalScore}</span>
+                    </div>
+                    <div className="game-stat">
+                        <span className="stat-label">Streak</span>
+                        <span className="stat-value">{gameState.currentStreak}x</span>
+                    </div>
+                </div>
+            </div>
+
+            {/* Score Popup */}
+            {scorePopup && (
+                <div
+                    className="score-popup"
+                    style={{
+                        left: scorePopup.x,
+                        top: scorePopup.y
+                    }}
+                >
+                    +{scorePopup.score}
+                </div>
+            )}
+
+            {/* Achievement Popup */}
+            {showAchievement && (
+                <div className="achievement-popup">
+                    <div className="achievement-title">🏆 Achievement Unlocked!</div>
+                    <div className="achievement-description">{showAchievement}</div>
+                </div>
+            )}
+
             <div className="pose-header">
                 <h1>Pose Tracking</h1>
                 {!isSessionComplete ? (
@@ -612,28 +871,84 @@ const PoseTracker = ({ userPreferences }) => {
                 <div className="stats-section">
                     <div className="accuracy-card">
                         <h3>Overall Accuracy</h3>
-                        <div className="accuracy-value">{poseAccuracy}%</div>
+                        <div className={`accuracy-value ${isSessionStarted ? getAccuracyClass(poseAccuracy) : 'perfect'}`}>
+                            {isSessionStarted ? poseAccuracy : 100}%
+                        </div>
+                        {isSessionStarted && accuracyRating && (
+                            <div className={`accuracy-rating ${accuracyRating}`}>
+                                {accuracyRating}
+                            </div>
+                        )}
                     </div>
 
                     <div className="segment-accuracies">
-                        {Object.entries(segmentAccuracies).map(([segment, data]) => (
-                            <div key={segment} className="segment-item">
-                                <label>{segment.replace(/([A-Z])/g, ' $1').trim()}</label>
-                                <div className="accuracy-bar">
-                                    <div
-                                        className="accuracy-fill"
-                                        style={{ width: `${data.accuracy}%` }}
-                                    />
+                        {isSessionStarted ? (
+                            Object.entries(segmentAccuracies).map(([segment, data]) => (
+                                <div key={segment} className="segment-item">
+                                    <label>{segment.replace(/([A-Z])/g, ' $1').trim()}</label>
+                                    <div className="accuracy-bar">
+                                        <div
+                                            className="accuracy-fill"
+                                            style={{ width: `${data.accuracy}%` }}
+                                        />
+                                    </div>
                                 </div>
-                            </div>
-                        ))}
+                            ))
+                        ) : (
+                            // Show default 100% segments before session starts
+                            Object.keys(bodySegments).map((segment) => (
+                                <div key={segment} className="segment-item">
+                                    <label>{segment.replace(/([A-Z])/g, ' $1').trim()}</label>
+                                    <div className="accuracy-bar">
+                                        <div
+                                            className="accuracy-fill"
+                                            style={{ width: '100%' }}
+                                        />
+                                    </div>
+                                </div>
+                            ))
+                        )}
                     </div>
 
-                    {poseFeedback && (
-                        <div className="feedback-message">
-                            {poseFeedback}
+                    {isSessionStarted && gameFeedback && (
+                        <div className="feedback-card">
+                            <h3>Instructor Feedback</h3>
+                            <div className="feedback-section">
+                                {gameFeedback}
+                            </div>
                         </div>
                     )}
+
+                    <div className="sensor-data-section">
+                        <h3>Biometric Data</h3>
+                        <div className="sensor-grid">
+                            <div className="sensor-card">
+                                <span className="sensor-label">Heart Rate</span>
+                                <span className="sensor-value">{sensorData.heartRate} BPM</span>
+                            </div>
+                            <div className="sensor-card">
+                                <span className="sensor-label">Temperature</span>
+                                <span className="sensor-value">{sensorData.temperature}°C</span>
+                            </div>
+                            <div className="sensor-card">
+                                <span className="sensor-label">Motion</span>
+                                <div className="motion-data">
+                                    <div>
+                                        <small>Acceleration (m/s²)</small>
+                                        <div>X: {sensorData.acceleration.x.toFixed(2)}</div>
+                                        <div>Y: {sensorData.acceleration.y.toFixed(2)}</div>
+                                        <div>Z: {sensorData.acceleration.z.toFixed(2)}</div>
+                                    </div>
+                                    <div>
+                                        <small>Rotation (deg/s)</small>
+                                        <div>X: {sensorData.gyroscope.x.toFixed(2)}</div>
+                                        <div>Y: {sensorData.gyroscope.y.toFixed(2)}</div>
+                                        <div>Z: {sensorData.gyroscope.z.toFixed(2)}</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
 

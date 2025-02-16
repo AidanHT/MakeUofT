@@ -21,7 +21,8 @@ const Sidebar = () => {
     return (
         <div className="sidebar">
             <div className="sidebar-header">
-                <h2>YogaAI</h2>
+                <Link to="/" className="sidebar-logo">MindMaxxing</Link>
+                <div className="sidebar-subtitle">AI-Powered Fitness Training</div>
             </div>
             <nav className="sidebar-nav">
                 <Link

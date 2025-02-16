@@ -74,11 +74,9 @@ function Login({ onLogin, onSignup }) {
             <div className="login-box">
                 <div className="login-content">
                     <div className="login-header">
-                        <h2>{isSignUp ? 'Create Account' : 'Welcome Back'}</h2>
+                        <h2>Welcome to MindMaxxing</h2>
                         <p className="login-subtitle">
-                            {isSignUp
-                                ? 'Start your yoga journey today'
-                                : 'Continue your yoga practice'}
+                            Transform your wellness journey
                         </p>
                     </div>
 
@@ -179,7 +177,7 @@ function Login({ onLogin, onSignup }) {
                 <div className="login-info">
                     <h3>Why Choose MindMaxxing?</h3>
                     <p>
-                        Join our community and transform your yoga practice with cutting-edge AI technology.
+                        Join our community and transform your yoga practice with motion-tracking technology.
                     </p>
                     <ul className="benefits-list">
                         <li>Personalized yoga sequences based on your level</li>
