@@ -19,14 +19,18 @@ router.post('/questionnaire', auth, async (req, res) => {
             focusAreas
         } = req.body;
 
+        console.log('Received profile data:', req.body);
+
         // Get user email from the authenticated user
         const user = await User.findById(req.user.userId);
         if (!user) {
+            console.error('User not found:', req.user.userId);
             return res.status(404).json({ error: 'User not found' });
         }
 
         // Check if profile already exists
         let userProfile = await UserProfile.findOne({ userId: req.user.userId });
+        console.log('Existing profile:', userProfile);
 
         if (userProfile) {
             // Update existing profile
@@ -54,7 +58,16 @@ router.post('/questionnaire', auth, async (req, res) => {
             });
         }
 
-        await userProfile.save();
+        try {
+            await userProfile.save();
+            console.log('Profile saved successfully:', userProfile);
+        } catch (saveError) {
+            console.error('Error saving profile:', saveError);
+            return res.status(400).json({
+                error: 'Failed to save profile',
+                details: saveError.message
+            });
+        }
 
         res.json({
             message: 'Profile updated successfully',
@@ -62,7 +75,10 @@ router.post('/questionnaire', auth, async (req, res) => {
         });
     } catch (error) {
         console.error('Profile update error:', error);
-        res.status(400).json({ error: error.message });
+        res.status(500).json({
+            error: 'Failed to update profile',
+            details: error.message
+        });
     }
 });
 

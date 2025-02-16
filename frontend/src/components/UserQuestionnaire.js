@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { submitQuestionnaire } from '../services/api';
 import './UserQuestionnaire.css';
@@ -6,7 +6,7 @@ import './UserQuestionnaire.css';
 function UserQuestionnaire({ onSubmit }) {
     const navigate = useNavigate();
     const [error, setError] = useState('');
-    const [isLoading, setIsLoading] = useState(false);
+    const [isLoading, setIsLoading] = useState(true);
     const [formData, setFormData] = useState({
         age: '',
         weight: '',
@@ -17,6 +17,44 @@ function UserQuestionnaire({ onSubmit }) {
         practiceFrequency: 'weekly',
         focusAreas: []
     });
+
+    useEffect(() => {
+        const fetchUserProfile = async () => {
+            try {
+                const token = localStorage.getItem('token');
+
+                // Fetch user profile data
+                const profileResponse = await fetch('http://localhost:5000/api/users/profile', {
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                if (profileResponse.ok) {
+                    const profileData = await profileResponse.json();
+                    // Update form data with existing profile data
+                    setFormData(prev => ({
+                        age: profileData.age?.toString() || '',
+                        weight: profileData.weight?.toString() || '',
+                        height: profileData.height?.toString() || '',
+                        experience: profileData.experience || 'beginner',
+                        poseCount: profileData.poseCount?.toString() || '4',
+                        practiceDuration: profileData.practiceDuration?.toString() || '30',
+                        practiceFrequency: profileData.practiceFrequency || 'weekly',
+                        focusAreas: profileData.focusAreas || []
+                    }));
+                }
+            } catch (err) {
+                console.error('Error fetching profile:', err);
+                // Don't set error - just use default values if fetch fails
+            } finally {
+                setIsLoading(false);
+            }
+        };
+
+        fetchUserProfile();
+    }, []);
 
     const handleChange = (e) => {
         const { name, value, type, checked } = e.target;
@@ -69,6 +107,16 @@ function UserQuestionnaire({ onSubmit }) {
         }
     };
 
+    if (isLoading) {
+        return (
+            <div className="questionnaire-container">
+                <div className="questionnaire-box">
+                    <div className="loading">Loading your profile data...</div>
+                </div>
+            </div>
+        );
+    }
+
     return (
         <div className="questionnaire-container">
             <div className="questionnaire-box">
@@ -89,7 +137,7 @@ function UserQuestionnaire({ onSubmit }) {
                             required
                             min="13"
                             max="100"
-                            placeholder="Enter your age"
+                            placeholder={formData.age ? undefined : "Enter your age"}
                         />
                     </div>
 
@@ -104,7 +152,7 @@ function UserQuestionnaire({ onSubmit }) {
                             required
                             min="30"
                             max="200"
-                            placeholder="Enter your weight in kg"
+                            placeholder={formData.weight ? undefined : "Enter your weight in kg"}
                         />
                     </div>
 
@@ -119,7 +167,7 @@ function UserQuestionnaire({ onSubmit }) {
                             required
                             min="100"
                             max="250"
-                            placeholder="Enter your height in cm"
+                            placeholder={formData.height ? undefined : "Enter your height in cm"}
                         />
                     </div>
 

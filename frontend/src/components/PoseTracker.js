@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useState, useCallback } from 'react';
+import React, { useRef, useEffect, useState, useCallback, useMemo } from 'react';
 import Webcam from 'react-webcam';
 import { Camera } from '@mediapipe/camera_utils';
 import { Pose } from '@mediapipe/pose';
@@ -8,6 +8,8 @@ const PoseTracker = ({ userPreferences }) => {
     const webcamRef = useRef(null);
     const canvasRef = useRef(null);
     const poseRef = useRef(null);
+    const cameraRef = useRef(null);
+    const cleanupInProgressRef = useRef(false);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState(null);
     const [poseAccuracy, setPoseAccuracy] = useState(0);
@@ -16,104 +18,130 @@ const PoseTracker = ({ userPreferences }) => {
     const [wsConnection, setWsConnection] = useState(null);
     const [selectedPose, setSelectedPose] = useState(null);
 
-    const videoConstraints = {
+    // New state variables for pose cycling
+    const [availablePoses, setAvailablePoses] = useState([]);
+    const [currentPoseIndex, setCurrentPoseIndex] = useState(0);
+    const [timeRemaining, setTimeRemaining] = useState(15);
+    const [isSessionComplete, setIsSessionComplete] = useState(false);
+    const [totalPosesCompleted, setTotalPosesCompleted] = useState(0);
+
+    // Add new state variables for session control
+    const [isSessionStarted, setIsSessionStarted] = useState(false);
+    const [isPaused, setIsPaused] = useState(false);
+    const [isInitialized, setIsInitialized] = useState(false);
+
+    // Constants
+    const POSE_DURATION = 15; // seconds
+    const poseNames = [
+        'crescent-lunge',
+        'dancers-pose',
+        'high-plank-pose',
+        'mountain-pose',
+        'seated-forward-fold',
+        'tree-pose',
+        'triangle-pose',
+        'upward-facing-dog'
+    ];
+
+    // Throttle pose detection frames
+    const lastProcessedTime = useRef(0);
+    const FRAME_RATE = 30; // Process 30 frames per second
+    const FRAME_INTERVAL = 1000 / FRAME_RATE;
+
+    // Memoize video constraints
+    const videoConstraints = useMemo(() => ({
         width: 640,
         height: 480,
         facingMode: 'user',
-    };
+    }), []);
 
-    const calculatePoseAccuracy = (userLandmarks, targetPose) => {
-        if (!targetPose || !userLandmarks) return { total: 0, segments: {} };
+    // Memoize segment definitions
+    const bodySegments = useMemo(() => ({
+        head: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+        upperBody: [11, 12, 13, 14, 15, 16],
+        torso: [11, 12, 23, 24],
+        lowerBody: [23, 24, 25, 26, 27, 28]
+    }), []);
 
-        // Define body segments with their corresponding landmark indices
-        const bodySegments = {
-            head: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
-            upperBody: [11, 12, 13, 14, 15, 16], // shoulders, elbows, wrists
-            torso: [11, 12, 23, 24], // shoulders to hips
-            lowerBody: [23, 24, 25, 26, 27, 28] // hips to ankles
-        };
+    const requiredPoints = useMemo(() => ({
+        head: [0, 1, 4],
+        upperBody: [11, 12],
+        torso: [11, 12, 23, 24],
+        lowerBody: [23, 24, 25, 26]
+    }), []);
 
-        // Define key points that must be visible for each segment
-        const requiredPoints = {
-            head: [0, 1, 4], // Nose and eyes
-            upperBody: [11, 12], // Shoulders
-            torso: [11, 12, 23, 24], // Shoulders and hips
-            lowerBody: [23, 24, 25, 26] // Hips and knees
-        };
+    const segmentWeights = useMemo(() => ({
+        head: 1,
+        upperBody: 1.2,
+        torso: 1.2,
+        lowerBody: 1
+    }), []);
 
-        // Helper function to normalize pose relative to shoulders
-        const normalizePose = (landmarks) => {
-            const leftShoulder = landmarks[11];
-            const rightShoulder = landmarks[12];
+    // Memoize normalization function
+    const normalizePose = useCallback((landmarks) => {
+        const leftShoulder = landmarks[11];
+        const rightShoulder = landmarks[12];
 
-            const shoulderCenterX = (leftShoulder.x + rightShoulder.x) / 2;
-            const shoulderCenterY = (leftShoulder.y + rightShoulder.y) / 2;
-            const shoulderWidth = Math.sqrt(
-                Math.pow(rightShoulder.x - leftShoulder.x, 2) +
-                Math.pow(rightShoulder.y - leftShoulder.y, 2)
-            );
+        const shoulderCenterX = (leftShoulder.x + rightShoulder.x) / 2;
+        const shoulderCenterY = (leftShoulder.y + rightShoulder.y) / 2;
+        const shoulderWidth = Math.sqrt(
+            Math.pow(rightShoulder.x - leftShoulder.x, 2) +
+            Math.pow(rightShoulder.y - leftShoulder.y, 2)
+        );
 
-            return landmarks.map(landmark => ({
-                x: (landmark.x - shoulderCenterX) / shoulderWidth,
-                y: (landmark.y - shoulderCenterY) / shoulderWidth,
-                visibility: landmark.visibility
-            }));
-        };
+        return landmarks.map(landmark => ({
+            x: (landmark.x - shoulderCenterX) / shoulderWidth,
+            y: (landmark.y - shoulderCenterY) / shoulderWidth,
+            visibility: landmark.visibility
+        }));
+    }, []);
 
-        // Normalize both poses
+    // Optimize pose accuracy calculation
+    const calculatePoseAccuracy = useCallback((userLandmarks, targetPose) => {
+        if (!targetPose?.landmarks || !userLandmarks) return { total: 0, segments: {} };
+
         const normalizedUser = normalizePose(userLandmarks);
         const normalizedTarget = normalizePose(targetPose.landmarks);
 
         let segmentAccuracies = {};
         let visibleSegments = 0;
 
-        // Calculate accuracy for each body segment
         for (const [segment, points] of Object.entries(bodySegments)) {
-            // Check if required points are visible
             const requiredVisible = requiredPoints[segment].every(index => {
                 const userPoint = normalizedUser[index];
                 const targetPoint = normalizedTarget[index];
                 return userPoint.visibility > 0.5 && targetPoint.visibility > 0.5;
             });
 
-            if (!requiredVisible) {
-                continue; // Skip this segment if required points aren't visible
-            }
+            if (!requiredVisible) continue;
 
             let segmentTotal = 0;
             let segmentPoints = 0;
 
-            // Calculate accuracies for points
-            points.forEach(index => {
+            for (const index of points) {
                 const userLandmark = normalizedUser[index];
                 const targetLandmark = normalizedTarget[index];
 
-                // Check if point is visible enough in both poses
                 if (userLandmark.visibility > 0.5 && targetLandmark.visibility > 0.5) {
-                    // Calculate angle between points relative to shoulder center
                     const userAngle = Math.atan2(userLandmark.y, userLandmark.x);
                     const targetAngle = Math.atan2(targetLandmark.y, targetLandmark.x);
                     const angleDiff = Math.abs(userAngle - targetAngle);
 
-                    // Calculate position difference
-                    const distance = Math.sqrt(
-                        Math.pow(userLandmark.x - targetLandmark.x, 2) +
-                        Math.pow(userLandmark.y - targetLandmark.y, 2)
+                    const distance = Math.hypot(
+                        userLandmark.x - targetLandmark.x,
+                        userLandmark.y - targetLandmark.y
                     );
 
-                    // Combine angle and distance accuracy
                     const angleAccuracy = Math.max(0, 1 - (angleDiff / Math.PI));
                     const distanceAccuracy = Math.max(0, 1 - (distance / 0.5));
                     const pointAccuracy = (angleAccuracy * 0.7 + distanceAccuracy * 0.3);
 
-                    // Add to segment total with visibility weight
                     const weight = Math.min(userLandmark.visibility, targetLandmark.visibility);
                     segmentTotal += pointAccuracy * weight;
                     segmentPoints += weight;
                 }
-            });
+            }
 
-            // Calculate segment accuracy if we have points
             if (segmentPoints > 0) {
                 const rawAccuracy = (segmentTotal / segmentPoints) * 100;
                 segmentAccuracies[segment] = {
@@ -124,19 +152,10 @@ const PoseTracker = ({ userPreferences }) => {
             }
         }
 
-        // Calculate overall accuracy
         if (visibleSegments === 0) return { total: 0, segments: {} };
 
         let totalAccuracy = 0;
         let totalWeight = 0;
-
-        // Weight segments differently
-        const segmentWeights = {
-            head: 1,
-            upperBody: 1.2,
-            torso: 1.2,
-            lowerBody: 1
-        };
 
         for (const [segment, data] of Object.entries(segmentAccuracies)) {
             const weight = segmentWeights[segment] * data.visibility;
@@ -148,36 +167,39 @@ const PoseTracker = ({ userPreferences }) => {
             total: Math.round(totalWeight > 0 ? totalAccuracy / totalWeight : 0),
             segments: segmentAccuracies
         };
-    };
+    }, [bodySegments, requiredPoints, segmentWeights, normalizePose]);
 
+    // Optimize onResults callback
     const onResults = useCallback((results) => {
         if (!canvasRef.current || !results.poseLandmarks) return;
 
+        // Throttle frame processing
+        const now = performance.now();
+        if (now - lastProcessedTime.current < FRAME_INTERVAL) return;
+        lastProcessedTime.current = now;
+
         const canvasElement = canvasRef.current;
         const canvasCtx = canvasElement.getContext('2d');
-        const videoWidth = webcamRef.current.video.videoWidth;
-        const videoHeight = webcamRef.current.video.videoHeight;
+        const videoWidth = webcamRef.current?.video?.videoWidth || 640;
+        const videoHeight = webcamRef.current?.video?.videoHeight || 480;
 
         // Set canvas dimensions to match video
-        canvasElement.width = videoWidth;
-        canvasElement.height = videoHeight;
+        if (canvasElement.width !== videoWidth) {
+            canvasElement.width = videoWidth;
+            canvasElement.height = videoHeight;
+        }
 
         // Calculate pose accuracy if we have a selected pose
-        if (selectedPose && selectedPose.landmarks) {
+        if (selectedPose?.landmarks && !isPaused) {
             const accuracyData = calculatePoseAccuracy(results.poseLandmarks, selectedPose);
             setPoseAccuracy(accuracyData.total);
             setSegmentAccuracies(accuracyData.segments);
         }
 
-        // Clear canvas
-        canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
-
-        // Draw pose landmarks
+        // Draw pose landmarks with optimized rendering
         if (results.poseLandmarks) {
             canvasCtx.save();
-            canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
-
-            // Mirror the canvas context
+            canvasCtx.clearRect(0, 0, videoWidth, videoHeight);
             canvasCtx.scale(-1, 1);
             canvasCtx.translate(-videoWidth, 0);
 
@@ -253,25 +275,146 @@ const PoseTracker = ({ userPreferences }) => {
 
             canvasCtx.restore();
         }
-    }, [selectedPose]);
+    }, [selectedPose, isPaused, calculatePoseAccuracy]);
 
     useEffect(() => {
-        let pose = null;
-        let camera = null;
+        const loadPoses = async () => {
+            try {
+                setIsLoading(true);
+                setError(null);
 
+                // Default to 1 pose if no preferences
+                const count = userPreferences?.poseCount || 1;
+                console.log('Loading poses with count:', count);
+
+                // Load all poses up to the user's poseCount
+                const posesToLoad = poseNames.slice(0, count);
+                console.log('Poses to load:', posesToLoad);
+
+                const loadedPoses = await Promise.all(
+                    posesToLoad.map(async (poseName) => {
+                        try {
+                            const response = await fetch(`${process.env.PUBLIC_URL}/pose_results/${poseName}_pose.json`);
+                            if (!response.ok) {
+                                throw new Error(`Failed to load pose: ${poseName}`);
+                            }
+                            const poseData = await response.json();
+                            return { ...poseData, name: poseName };
+                        } catch (err) {
+                            console.error(`Error loading pose ${poseName}:`, err);
+                            throw err;
+                        }
+                    })
+                );
+
+                console.log('Loaded poses:', loadedPoses);
+                setAvailablePoses(loadedPoses);
+                if (loadedPoses.length > 0) {
+                    setSelectedPose(loadedPoses[0]);
+                }
+                setIsLoading(false);
+            } catch (err) {
+                console.error('Error loading pose data:', err);
+                setError('Failed to load pose data. Please check your internet connection and try again.');
+                setIsLoading(false);
+            }
+        };
+
+        if (userPreferences) {
+            loadPoses();
+        }
+    }, [userPreferences]);
+
+    const cleanup = useCallback(() => {
+        if (cleanupInProgressRef.current) return;
+        cleanupInProgressRef.current = true;
+
+        try {
+            if (cameraRef.current) {
+                cameraRef.current.stop();
+                cameraRef.current = null;
+            }
+            if (poseRef.current) {
+                poseRef.current.close();
+                poseRef.current = null;
+            }
+        } catch (err) {
+            console.error('Error during cleanup:', err);
+        } finally {
+            cleanupInProgressRef.current = false;
+        }
+    }, []);
+
+    // Timer effect for pose cycling
+    useEffect(() => {
+        if (!availablePoses.length || isSessionComplete || !isSessionStarted || isPaused) return;
+
+        const timer = setInterval(() => {
+            setTimeRemaining(prev => {
+                if (prev <= 1) {
+                    // Time to switch poses
+                    setCurrentPoseIndex(currentIndex => {
+                        const nextIndex = currentIndex + 1;
+                        // Increment completed poses count for the pose that just finished
+                        setTotalPosesCompleted(prev => prev + 1);
+
+                        if (nextIndex >= availablePoses.length) {
+                            setIsSessionComplete(true);
+                            cleanup();
+                            return currentIndex;
+                        }
+                        setSelectedPose(availablePoses[nextIndex]);
+                        return nextIndex;
+                    });
+                    return POSE_DURATION;
+                }
+                return prev - 1;
+            });
+        }, 1000);
+
+        return () => clearInterval(timer);
+    }, [availablePoses, isSessionComplete, cleanup, isSessionStarted, isPaused]);
+
+    // Handler for starting the session
+    const handleStartSession = useCallback(() => {
+        setIsSessionStarted(true);
+        setIsPaused(false);
+        setTimeRemaining(POSE_DURATION);
+        setTotalPosesCompleted(0);
+    }, []);
+
+    // Handler for pausing/resuming the session
+    const handlePauseResume = useCallback(() => {
+        setIsPaused(prev => !prev);
+    }, []);
+
+    // Handler for resetting the session
+    const handleReset = useCallback(() => {
+        cleanup();
+        setIsSessionStarted(false);
+        setIsPaused(false);
+        setIsSessionComplete(false);
+        setCurrentPoseIndex(0);
+        setTimeRemaining(POSE_DURATION);
+        setTotalPosesCompleted(0);
+        if (availablePoses.length > 0) {
+            setSelectedPose(availablePoses[0]);
+        }
+    }, [cleanup, availablePoses]);
+
+    // Optimize MediaPipe initialization
+    useEffect(() => {
         const initializePose = async () => {
             try {
-                // Create a new Pose instance
-                pose = new Pose({
-                    locateFile: (file) => {
-                        return `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`;
-                    }
+                setIsLoading(true);
+                setError(null);
+
+                cleanup();
+
+                const pose = new Pose({
+                    locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`
                 });
 
-                // Wait for the pose model to be ready
-                await pose.initialize();
-
-                // Configure pose options
                 pose.setOptions({
                     modelComplexity: 1,
                     smoothLandmarks: true,
@@ -281,13 +424,21 @@ const PoseTracker = ({ userPreferences }) => {
                     minTrackingConfidence: 0.5
                 });
 
+                await pose.initialize();
                 pose.onResults(onResults);
+                poseRef.current = pose;
 
-                if (webcamRef.current && webcamRef.current.video) {
-                    camera = new Camera(webcamRef.current.video, {
+                if (webcamRef.current?.video) {
+                    const camera = new Camera(webcamRef.current.video, {
                         onFrame: async () => {
-                            if (webcamRef.current && webcamRef.current.video) {
-                                await pose.send({ image: webcamRef.current.video });
+                            if (webcamRef.current?.video && poseRef.current && !cleanupInProgressRef.current && !isPaused) {
+                                try {
+                                    await poseRef.current.send({ image: webcamRef.current.video });
+                                } catch (err) {
+                                    if (!err.message?.includes('already deleted')) {
+                                        console.error('Error in pose detection frame:', err);
+                                    }
+                                }
                             }
                         },
                         width: 640,
@@ -295,32 +446,34 @@ const PoseTracker = ({ userPreferences }) => {
                     });
 
                     await camera.start();
-                    setIsLoading(false);
+                    cameraRef.current = camera;
                 }
+
+                setIsInitialized(true);
+                setIsLoading(false);
             } catch (err) {
                 console.error('Error initializing pose detection:', err);
-                setError('Failed to initialize pose detection. Please try refreshing the page.');
+                setError('Failed to initialize pose detection. Please ensure you have granted camera permissions and try again.');
                 setIsLoading(false);
             }
         };
 
-        // Initialize pose detection
         const timeoutId = setTimeout(() => {
-            if (webcamRef.current && webcamRef.current.video) {
+            if (webcamRef.current?.video) {
                 initializePose();
             }
         }, 1000);
 
         return () => {
             clearTimeout(timeoutId);
-            if (camera) {
-                camera.stop();
-            }
-            if (pose) {
-                pose.close();
-            }
+            cleanup();
         };
-    }, [onResults]);
+    }, [onResults, cleanup, isPaused]);
+
+    // Cleanup on unmount
+    useEffect(() => {
+        return cleanup;
+    }, [cleanup]);
 
     useEffect(() => {
         // Initialize WebSocket connection
@@ -358,29 +511,60 @@ const PoseTracker = ({ userPreferences }) => {
         }
     }, [poseAccuracy, segmentAccuracies, selectedPose, wsConnection]);
 
-    // Load initial pose based on user preferences
-    useEffect(() => {
-        const loadPose = async () => {
-            try {
-                // You would typically load this from your backend or a static file
-                const response = await fetch('/pose_results/tree-pose_pose.json');
-                const poseData = await response.json();
-                setSelectedPose(poseData);
-            } catch (err) {
-                console.error('Error loading pose data:', err);
-                setError('Failed to load pose data. Please try refreshing the page.');
-            }
-        };
-
-        if (userPreferences) {
-            loadPose();
-        }
-    }, [userPreferences]);
-
     return (
         <div className="pose-tracker">
             <div className="pose-header">
                 <h1>Pose Tracking</h1>
+                {!isSessionComplete ? (
+                    <>
+                        {!isSessionStarted ? (
+                            <div className="session-controls">
+                                <h3>Ready to start your yoga session?</h3>
+                                <p>You will perform {availablePoses.length} poses, holding each for {POSE_DURATION} seconds.</p>
+                                <button
+                                    className="start-button"
+                                    onClick={handleStartSession}
+                                    disabled={!isInitialized || isLoading}
+                                >
+                                    Start Session
+                                </button>
+                            </div>
+                        ) : (
+                            <div className="pose-info">
+                                <h3>Current Pose: {selectedPose?.name?.replace(/-/g, ' ').replace(/_pose$/, '')}</h3>
+                                <div className="timer">Time Remaining: {timeRemaining}s</div>
+                                <div className="progress">
+                                    Pose {currentPoseIndex + 1} of {availablePoses.length || userPreferences?.poseCount || 1}
+                                </div>
+                                <div className="session-controls">
+                                    <button
+                                        className={`control-button ${isPaused ? 'resume' : 'pause'}`}
+                                        onClick={handlePauseResume}
+                                    >
+                                        {isPaused ? 'Resume' : 'Pause'}
+                                    </button>
+                                    <button
+                                        className="control-button reset"
+                                        onClick={handleReset}
+                                    >
+                                        Reset
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+                    </>
+                ) : (
+                    <div className="session-complete">
+                        <h3>Session Complete!</h3>
+                        <p>You completed {totalPosesCompleted} poses</p>
+                        <button
+                            className="start-button"
+                            onClick={handleReset}
+                        >
+                            Start New Session
+                        </button>
+                    </div>
+                )}
             </div>
 
             <div className="pose-container">
@@ -391,14 +575,38 @@ const PoseTracker = ({ userPreferences }) => {
                             videoConstraints={videoConstraints}
                             style={{ display: 'block' }}
                             mirrored={true}
+                            onUserMediaError={(err) => {
+                                console.error('Webcam error:', err);
+                                setError('Failed to access camera. Please ensure you have granted camera permissions.');
+                                setIsLoading(false);
+                            }}
                         />
-                        <canvas ref={canvasRef} />
+                        <canvas ref={canvasRef} className="pose-canvas" />
                         {isLoading && (
                             <div className="loading-overlay">
+                                <div className="loading-spinner"></div>
                                 <div>Loading pose detection...</div>
                             </div>
                         )}
                     </div>
+                    {selectedPose && isSessionStarted && (
+                        <div className="reference-pose">
+                            <h3>Reference Pose</h3>
+                            {console.log('Loading image for pose:', selectedPose.name)}
+                            <img
+                                src={selectedPose.name.endsWith('-pose')
+                                    ? `/training/photos/${selectedPose.name}.png`
+                                    : `/training/photos/${selectedPose.name}-pose.png`}
+                                alt={selectedPose.name.replace(/-/g, ' ')}
+                                className="reference-image"
+                                onError={(e) => {
+                                    console.error('Error loading image:', e.target.src);
+                                    e.target.style.display = 'none';
+                                }}
+                                onLoad={() => console.log('Successfully loaded image for:', selectedPose.name)}
+                            />
+                        </div>
+                    )}
                 </div>
 
                 <div className="stats-section">
@@ -431,7 +639,16 @@ const PoseTracker = ({ userPreferences }) => {
 
             {error && (
                 <div className="error-message">
-                    {error}
+                    <p>{error}</p>
+                    <button
+                        className="retry-button"
+                        onClick={() => {
+                            setError(null);
+                            window.location.reload();
+                        }}
+                    >
+                        Retry
+                    </button>
                 </div>
             )}
         </div>

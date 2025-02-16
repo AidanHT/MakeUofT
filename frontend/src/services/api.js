@@ -58,6 +58,7 @@ export const signup = async (userData) => {
 
 export const submitQuestionnaire = async (profileData) => {
     try {
+        console.log('Submitting profile data:', profileData);
         const response = await api.post('/users/questionnaire', {
             age: profileData.age,
             weight: profileData.weight,
@@ -80,9 +81,14 @@ export const submitQuestionnaire = async (profileData) => {
             }));
         }
 
+        console.log('Profile submission response:', response.data);
         return response.data;
     } catch (error) {
         console.error('Questionnaire submission error:', error);
+        if (error.response) {
+            console.error('Error response:', error.response.data);
+            throw error.response.data.error || 'Failed to submit questionnaire';
+        }
         throw error;
     }
 };
