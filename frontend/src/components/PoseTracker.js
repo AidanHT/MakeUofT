@@ -12,6 +12,8 @@ const PoseTracker = ({ selectedPose }) => {
     const [error, setError] = useState(null);
     const [poseAccuracy, setPoseAccuracy] = useState(0);
     const [segmentAccuracies, setSegmentAccuracies] = useState({});
+    const [poseFeedback, setPoseFeedback] = useState('');
+    const [wsConnection, setWsConnection] = useState(null);
 
     const videoConstraints = {
         width: 640,
@@ -312,6 +314,42 @@ const PoseTracker = ({ selectedPose }) => {
         };
     }, [onResults]);
 
+    useEffect(() => {
+        // Initialize WebSocket connection
+        const ws = new WebSocket('ws://localhost:8000/ws/pose-feedback');
+
+        ws.onopen = () => {
+            console.log('Connected to feedback server');
+            setWsConnection(ws);
+        };
+
+        ws.onmessage = (event) => {
+            setPoseFeedback(event.data);
+        };
+
+        ws.onerror = (error) => {
+            console.error('WebSocket error:', error);
+        };
+
+        return () => {
+            if (ws) {
+                ws.close();
+            }
+        };
+    }, []);
+
+    // Send pose data to backend when accuracy updates
+    useEffect(() => {
+        if (wsConnection && selectedPose && Object.keys(segmentAccuracies).length > 0) {
+            const poseData = {
+                pose_name: selectedPose.name || 'unknown pose',
+                overall_accuracy: poseAccuracy,
+                segment_accuracies: segmentAccuracies
+            };
+            wsConnection.send(JSON.stringify(poseData));
+        }
+    }, [poseAccuracy, segmentAccuracies, selectedPose, wsConnection]);
+
     return (
         <div className="pose-tracker">
             {isLoading && (
@@ -371,6 +409,18 @@ const PoseTracker = ({ selectedPose }) => {
                                 </div>
                             ))}
                         </div>
+                        {poseFeedback && (
+                            <div style={{
+                                marginTop: '15px',
+                                padding: '10px',
+                                borderTop: '1px solid rgba(255, 255, 255, 0.3)',
+                                fontSize: '0.9em',
+                                maxWidth: '300px'
+                            }}>
+                                <div style={{ fontWeight: 'bold', marginBottom: '5px' }}>Instructor Feedback:</div>
+                                {poseFeedback}
+                            </div>
+                        )}
                     </div>
                 )}
             </div>
