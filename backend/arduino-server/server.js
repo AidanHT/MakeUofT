@@ -6,6 +6,9 @@ const { ReadlineParser } = require('@serialport/parser-readline');
 const app = express();
 const server = require('http').createServer(app);
 
+// Add this near the top of the file
+const DEBUG = false;
+
 // Add basic route for testing connection
 app.get('/', (req, res) => {
   res.send('Arduino server is running');
@@ -43,29 +46,140 @@ port.on('open', () => {
   console.log('Serial port opened successfully');
 });
 
-// Parse incoming data from Arduino with validation
+// Add structured data events for specific sensor types
 parser.on('data', (data) => {
+  if (DEBUG) {
+    console.log('Raw data received:', data);
+    console.log('Data length:', data.length);
+    console.log('Data buffer:', Buffer.from(data));
+  }
   try {
-    const sensorData = JSON.parse(data);
-    
-    // Validate data structure
-    if (!isValidSensorData(sensorData)) {
-      console.warn('Invalid sensor data format:', data);
+    // Skip empty data
+    if (!data || data.trim() === '') {
       return;
     }
 
-    // Log all received data
-    console.log('Received sensor data:', {
-      heartRate: sensorData.heartRate,
+    // Clean the data: remove any extra characters and ensure proper JSON format
+    let cleanedData = data.trim()
+      .replace(/\r?\n|\r/g, '') // Remove any newlines
+      .replace(/}{/g, '}') // Remove any concatenated JSON objects
+      .replace(/\u0000/g, '') // Remove null bytes
+      .replace(/[^\x20-\x7E]/g, ''); // Remove non-printable characters
+
+    // Ensure the data starts with { and ends with }
+    if (!cleanedData.startsWith('{') || !cleanedData.endsWith('}')) {
+      console.warn('Malformed JSON data received:', data);
+      return;
+    }
+
+    const sensorData = JSON.parse(cleanedData);
+    
+    // Validate data structure
+    if (!isValidSensorData(sensorData)) {
+      console.warn('Invalid sensor data format:', cleanedData);
+      return;
+    }
+
+    // Log the successful parse
+    console.log('Successfully parsed sensor data:', sensorData);
+
+    // Emit individual events for each sensor type
+    io.emit('heartRate', { 
+      value: sensorData.heartRate,
+      timestamp: Date.now() 
+    });
+
+    io.emit('motion', {
       acceleration: sensorData.acceleration,
       gyroscope: sensorData.gyroscope,
-      temperature: sensorData.temperature
+      timestamp: Date.now()
     });
-    
-    // Emit the sensor data to all connected clients
-    io.emit('sensorData', sensorData);
+
+    io.emit('temperature', {
+      value: sensorData.temperature,
+      timestamp: Date.now()
+    });
+
+    // Keep the original combined event for backwards compatibility
+    io.emit('sensorData', {
+      ...sensorData,
+      timestamp: Date.now()
+    });
+
   } catch (err) {
-    console.error('Error parsing sensor data:', err, 'Raw data:', data);
+    console.error('Error parsing sensor data:', err.message);
+    console.error('Raw data:', JSON.stringify(data));
+    console.error('Data type:', typeof data);
+    console.error('Data length:', data.length);
+  }
+});
+
+// Add API endpoints for REST clients
+app.use(express.json());
+
+// GET endpoint to fetch latest sensor values
+let latestSensorData = null;
+parser.on('data', (data) => {
+  try {
+    if (!data || data.trim() === '') return;
+
+    let cleanedData = data.trim()
+      .replace(/\r?\n|\r/g, '')
+      .replace(/}{/g, '}')
+      .replace(/\u0000/g, '')
+      .replace(/[^\x20-\x7E]/g, '');
+
+    if (!cleanedData.startsWith('{') || !cleanedData.endsWith('}')) return;
+
+    latestSensorData = JSON.parse(cleanedData);
+  } catch (err) {
+    console.error('Error updating latest sensor data:', err.message);
+  }
+});
+
+app.get('/api/sensors', (req, res) => {
+  if (latestSensorData) {
+    res.json({
+      ...latestSensorData,
+      timestamp: Date.now()
+    });
+  } else {
+    res.status(503).json({ error: 'No sensor data available yet' });
+  }
+});
+
+// Add specific endpoints for each sensor type
+app.get('/api/sensors/heartrate', (req, res) => {
+  if (latestSensorData?.heartRate !== undefined) {
+    res.json({
+      value: latestSensorData.heartRate,
+      timestamp: Date.now()
+    });
+  } else {
+    res.status(503).json({ error: 'Heart rate data not available' });
+  }
+});
+
+app.get('/api/sensors/motion', (req, res) => {
+  if (latestSensorData?.acceleration && latestSensorData?.gyroscope) {
+    res.json({
+      acceleration: latestSensorData.acceleration,
+      gyroscope: latestSensorData.gyroscope,
+      timestamp: Date.now()
+    });
+  } else {
+    res.status(503).json({ error: 'Motion data not available' });
+  }
+});
+
+app.get('/api/sensors/temperature', (req, res) => {
+  if (latestSensorData?.temperature !== undefined) {
+    res.json({
+      value: latestSensorData.temperature,
+      timestamp: Date.now()
+    });
+  } else {
+    res.status(503).json({ error: 'Temperature data not available' });
   }
 });
 
