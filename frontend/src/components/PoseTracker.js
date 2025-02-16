@@ -4,17 +4,150 @@ import { Camera } from '@mediapipe/camera_utils';
 import { Pose } from '@mediapipe/pose';
 import './PoseTracker.css';
 
-const PoseTracker = () => {
+const PoseTracker = ({ selectedPose }) => {
     const webcamRef = useRef(null);
     const canvasRef = useRef(null);
     const poseRef = useRef(null);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState(null);
+    const [poseAccuracy, setPoseAccuracy] = useState(0);
+    const [segmentAccuracies, setSegmentAccuracies] = useState({});
 
     const videoConstraints = {
         width: 640,
         height: 480,
         facingMode: 'user',
+    };
+
+    const calculatePoseAccuracy = (userLandmarks, targetPose) => {
+        if (!targetPose || !userLandmarks) return { total: 0, segments: {} };
+
+        // Define body segments with their corresponding landmark indices
+        const bodySegments = {
+            head: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+            upperBody: [11, 12, 13, 14, 15, 16], // shoulders, elbows, wrists
+            torso: [11, 12, 23, 24], // shoulders to hips
+            lowerBody: [23, 24, 25, 26, 27, 28] // hips to ankles
+        };
+
+        // Define key points that must be visible for each segment
+        const requiredPoints = {
+            head: [0, 1, 4], // Nose and eyes
+            upperBody: [11, 12], // Shoulders
+            torso: [11, 12, 23, 24], // Shoulders and hips
+            lowerBody: [23, 24, 25, 26] // Hips and knees
+        };
+
+        // Helper function to normalize pose relative to shoulders
+        const normalizePose = (landmarks) => {
+            // Get shoulder points
+            const leftShoulder = landmarks[11];
+            const rightShoulder = landmarks[12];
+
+            // Calculate shoulder center and width
+            const shoulderCenterX = (leftShoulder.x + rightShoulder.x) / 2;
+            const shoulderCenterY = (leftShoulder.y + rightShoulder.y) / 2;
+            const shoulderWidth = Math.sqrt(
+                Math.pow(rightShoulder.x - leftShoulder.x, 2) +
+                Math.pow(rightShoulder.y - leftShoulder.y, 2)
+            );
+
+            // Return normalized landmarks
+            return landmarks.map(landmark => ({
+                x: (landmark.x - shoulderCenterX) / shoulderWidth,
+                y: (landmark.y - shoulderCenterY) / shoulderWidth,
+                visibility: landmark.visibility
+            }));
+        };
+
+        // Normalize both poses
+        const normalizedUser = normalizePose(userLandmarks);
+        const normalizedTarget = normalizePose(targetPose.landmarks);
+
+        let segmentAccuracies = {};
+        let visibleSegments = 0;
+
+        // Calculate accuracy for each body segment
+        for (const [segment, points] of Object.entries(bodySegments)) {
+            // Check if required points are visible
+            const requiredVisible = requiredPoints[segment].every(index => {
+                const userPoint = normalizedUser[index];
+                const targetPoint = normalizedTarget[index];
+                return userPoint.visibility > 0.5 && targetPoint.visibility > 0.5;
+            });
+
+            if (!requiredVisible) {
+                continue; // Skip this segment if required points aren't visible
+            }
+
+            let segmentTotal = 0;
+            let segmentPoints = 0;
+
+            // Calculate accuracies for points
+            points.forEach(index => {
+                const userLandmark = normalizedUser[index];
+                const targetLandmark = normalizedTarget[index];
+
+                // Check if point is visible enough in both poses
+                if (userLandmark.visibility > 0.5 && targetLandmark.visibility > 0.5) {
+                    // Calculate angle between points relative to shoulder center
+                    const userAngle = Math.atan2(userLandmark.y, userLandmark.x);
+                    const targetAngle = Math.atan2(targetLandmark.y, targetLandmark.x);
+                    const angleDiff = Math.abs(userAngle - targetAngle);
+
+                    // Calculate position difference
+                    const distance = Math.sqrt(
+                        Math.pow(userLandmark.x - targetLandmark.x, 2) +
+                        Math.pow(userLandmark.y - targetLandmark.y, 2)
+                    );
+
+                    // Combine angle and distance accuracy
+                    const angleAccuracy = Math.max(0, 1 - (angleDiff / Math.PI));
+                    const distanceAccuracy = Math.max(0, 1 - (distance / 0.5));
+                    const pointAccuracy = (angleAccuracy * 0.7 + distanceAccuracy * 0.3);
+
+                    // Add to segment total with visibility weight
+                    const weight = Math.min(userLandmark.visibility, targetLandmark.visibility);
+                    segmentTotal += pointAccuracy * weight;
+                    segmentPoints += weight;
+                }
+            });
+
+            // Calculate segment accuracy if we have points
+            if (segmentPoints > 0) {
+                const rawAccuracy = (segmentTotal / segmentPoints) * 100;
+                segmentAccuracies[segment] = {
+                    accuracy: Math.min(100, Math.max(0, rawAccuracy)),
+                    visibility: segmentPoints / points.length
+                };
+                visibleSegments++;
+            }
+        }
+
+        // Calculate overall accuracy
+        if (visibleSegments === 0) return { total: 0, segments: {} };
+
+        let totalAccuracy = 0;
+        let totalWeight = 0;
+
+        // Weight segments differently
+        const segmentWeights = {
+            head: 1,
+            upperBody: 1.2,
+            torso: 1.2,
+            lowerBody: 1
+        };
+
+        for (const [segment, data] of Object.entries(segmentAccuracies)) {
+            const weight = segmentWeights[segment] * data.visibility;
+            totalAccuracy += data.accuracy * weight;
+            totalWeight += weight;
+        }
+
+        return {
+            total: Math.round(totalWeight > 0 ? totalAccuracy / totalWeight : 0),
+            segments: segmentAccuracies
+        };
     };
 
     const onResults = useCallback((results) => {
@@ -28,6 +161,13 @@ const PoseTracker = () => {
         // Set canvas dimensions to match video
         canvasElement.width = videoWidth;
         canvasElement.height = videoHeight;
+
+        // Calculate pose accuracy if we have a selected pose
+        if (selectedPose && selectedPose.landmarks) {
+            const accuracyData = calculatePoseAccuracy(results.poseLandmarks, selectedPose);
+            setPoseAccuracy(accuracyData.total);
+            setSegmentAccuracies(accuracyData.segments);
+        }
 
         // Clear canvas
         canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
@@ -114,7 +254,7 @@ const PoseTracker = () => {
 
             canvasCtx.restore();
         }
-    }, []);
+    }, [selectedPose]);
 
     useEffect(() => {
         let pose = null;
@@ -209,6 +349,30 @@ const PoseTracker = () => {
                     videoConstraints={videoConstraints}
                 />
                 <canvas ref={canvasRef} className="pose-canvas" />
+                {selectedPose && selectedPose.landmarks && Object.keys(segmentAccuracies).length > 0 && (
+                    <div className="accuracy-display" style={{
+                        position: 'absolute',
+                        top: '20px',
+                        left: '20px',
+                        background: 'rgba(0, 0, 0, 0.7)',
+                        color: 'white',
+                        padding: '15px',
+                        borderRadius: '5px',
+                        fontSize: '1.1em',
+                        zIndex: 1000
+                    }}>
+                        <div style={{ marginBottom: '10px', fontWeight: 'bold' }}>
+                            Overall Accuracy: {poseAccuracy}%
+                        </div>
+                        <div style={{ fontSize: '0.9em' }}>
+                            {Object.entries(segmentAccuracies).map(([segment, data]) => (
+                                <div key={segment} style={{ marginBottom: '5px' }}>
+                                    {segment.charAt(0).toUpperCase() + segment.slice(1)}: {Math.round(data.accuracy)}%
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
             </div>
         </div>
     );
