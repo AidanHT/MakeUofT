@@ -4,7 +4,7 @@ import { Camera } from '@mediapipe/camera_utils';
 import { Pose } from '@mediapipe/pose';
 import './PoseTracker.css';
 
-const PoseTracker = ({ selectedPose }) => {
+const PoseTracker = ({ userPreferences }) => {
     const webcamRef = useRef(null);
     const canvasRef = useRef(null);
     const poseRef = useRef(null);
@@ -14,6 +14,7 @@ const PoseTracker = ({ selectedPose }) => {
     const [segmentAccuracies, setSegmentAccuracies] = useState({});
     const [poseFeedback, setPoseFeedback] = useState('');
     const [wsConnection, setWsConnection] = useState(null);
+    const [selectedPose, setSelectedPose] = useState(null);
 
     const videoConstraints = {
         width: 640,
@@ -42,11 +43,9 @@ const PoseTracker = ({ selectedPose }) => {
 
         // Helper function to normalize pose relative to shoulders
         const normalizePose = (landmarks) => {
-            // Get shoulder points
             const leftShoulder = landmarks[11];
             const rightShoulder = landmarks[12];
 
-            // Calculate shoulder center and width
             const shoulderCenterX = (leftShoulder.x + rightShoulder.x) / 2;
             const shoulderCenterY = (leftShoulder.y + rightShoulder.y) / 2;
             const shoulderWidth = Math.sqrt(
@@ -54,7 +53,6 @@ const PoseTracker = ({ selectedPose }) => {
                 Math.pow(rightShoulder.y - leftShoulder.y, 2)
             );
 
-            // Return normalized landmarks
             return landmarks.map(landmark => ({
                 x: (landmark.x - shoulderCenterX) / shoulderWidth,
                 y: (landmark.y - shoulderCenterY) / shoulderWidth,
@@ -176,7 +174,6 @@ const PoseTracker = ({ selectedPose }) => {
 
         // Draw pose landmarks
         if (results.poseLandmarks) {
-            // Draw the pose landmarks
             canvasCtx.save();
             canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
 
@@ -350,6 +347,25 @@ const PoseTracker = ({ selectedPose }) => {
         }
     }, [poseAccuracy, segmentAccuracies, selectedPose, wsConnection]);
 
+    // Load initial pose based on user preferences
+    useEffect(() => {
+        const loadPose = async () => {
+            try {
+                // You would typically load this from your backend or a static file
+                const response = await fetch('/pose_results/tree-pose_pose.json');
+                const poseData = await response.json();
+                setSelectedPose(poseData);
+            } catch (err) {
+                console.error('Error loading pose data:', err);
+                setError('Failed to load pose data. Please try refreshing the page.');
+            }
+        };
+
+        if (userPreferences) {
+            loadPose();
+        }
+    }, [userPreferences]);
+
     return (
         <div className="pose-tracker">
             {isLoading && (
@@ -365,15 +381,7 @@ const PoseTracker = ({ selectedPose }) => {
                     <p>{error}</p>
                     <button
                         onClick={() => window.location.reload()}
-                        style={{
-                            marginTop: '10px',
-                            padding: '8px 16px',
-                            backgroundColor: '#4CAF50',
-                            color: 'white',
-                            border: 'none',
-                            borderRadius: '4px',
-                            cursor: 'pointer',
-                        }}
+                        className="retry-button"
                     >
                         Retry
                     </button>
@@ -388,36 +396,20 @@ const PoseTracker = ({ selectedPose }) => {
                 />
                 <canvas ref={canvasRef} className="pose-canvas" />
                 {selectedPose && selectedPose.landmarks && Object.keys(segmentAccuracies).length > 0 && (
-                    <div className="accuracy-display" style={{
-                        position: 'absolute',
-                        top: '20px',
-                        left: '20px',
-                        background: 'rgba(0, 0, 0, 0.7)',
-                        color: 'white',
-                        padding: '15px',
-                        borderRadius: '5px',
-                        fontSize: '1.1em',
-                        zIndex: 1000
-                    }}>
-                        <div style={{ marginBottom: '10px', fontWeight: 'bold' }}>
+                    <div className="accuracy-display">
+                        <div className="accuracy-overall">
                             Overall Accuracy: {poseAccuracy}%
                         </div>
-                        <div style={{ fontSize: '0.9em' }}>
+                        <div className="accuracy-segments">
                             {Object.entries(segmentAccuracies).map(([segment, data]) => (
-                                <div key={segment} style={{ marginBottom: '5px' }}>
+                                <div key={segment} className="accuracy-segment">
                                     {segment.charAt(0).toUpperCase() + segment.slice(1)}: {Math.round(data.accuracy)}%
                                 </div>
                             ))}
                         </div>
                         {poseFeedback && (
-                            <div style={{
-                                marginTop: '15px',
-                                padding: '10px',
-                                borderTop: '1px solid rgba(255, 255, 255, 0.3)',
-                                fontSize: '0.9em',
-                                maxWidth: '300px'
-                            }}>
-                                <div style={{ fontWeight: 'bold', marginBottom: '5px' }}>Instructor Feedback:</div>
+                            <div className="pose-feedback">
+                                <div className="feedback-title">Instructor Feedback:</div>
                                 {poseFeedback}
                             </div>
                         )}

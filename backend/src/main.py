@@ -91,4 +91,4 @@ async def pose_feedback_websocket(websocket: WebSocket):
 
 @app.get("/")
 def read_root():
-    return {"status": "Yoga Pose Analysis API is running"} 
+    return {"status": "MindMaxxing API is running"} 

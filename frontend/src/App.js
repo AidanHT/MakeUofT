@@ -1,82 +1,84 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
+import { BrowserRouter as Router, Route, Routes, Navigate } from 'react-router-dom';
 import PoseTracker from './components/PoseTracker';
+import HomePage from './components/HomePage';
+import Login from './components/Login';
+import UserQuestionnaire from './components/UserQuestionnaire';
 import './App.css';
 
 function App() {
-    const [selectedPose, setSelectedPose] = useState(null);
-    const [poseData, setPoseData] = useState(null);
-    const [loading, setLoading] = useState(false);
+    const [user, setUser] = useState(null);
+    const [userPreferences, setUserPreferences] = useState(null);
+    const [isNewUser, setIsNewUser] = useState(false);
 
-    const poses = [
-        'seated-forward-fold',
-        'triangle-pose',
-        'upward-facing-dog',
-        'crescent-lunge',
-        'tree-pose',
-        'mountain-pose',
-        'dancers-pose'
-    ];
+    const handleLogin = (userData) => {
+        setUser(userData);
+        setIsNewUser(false); // Existing users are not new
+        // For existing users, we'll try to load their preferences from the backend
+        // This is a placeholder - you should implement the actual API call
+        setUserPreferences(userData.preferences || {
+            experience: 'beginner',
+            poseCount: 4
+        });
+    };
 
-    const loadPoseData = async (poseName) => {
-        if (!poseName) {
-            setPoseData(null);
-            setSelectedPose(null);
-            return;
-        }
+    const handleSignup = (userData) => {
+        setUser(userData);
+        setIsNewUser(true); // Mark as new user on signup
+        setUserPreferences(null); // New users need to fill out the questionnaire
+    };
 
-        try {
-            setLoading(true);
-            const response = await fetch(`/pose_results/${poseName}_pose.json`);
-            if (!response.ok) {
-                throw new Error('Failed to load pose data');
-            }
-            const data = await response.json();
-            setPoseData(data);
-            setSelectedPose(poseName);
-        } catch (error) {
-            console.error('Error loading pose data:', error);
-            alert('Failed to load pose data. Please try again.');
-            setPoseData(null);
-            setSelectedPose(null);
-        } finally {
-            setLoading(false);
-        }
+    const handleQuestionnaireSubmit = (preferences) => {
+        setUserPreferences(preferences);
+        setIsNewUser(false); // Reset new user flag after questionnaire
     };
 
     return (
-        <div className="App">
-            <header className="App-header">
-                <h1>Workout Pose Tracker</h1>
-                <div className="pose-selector">
-                    <select
-                        value={selectedPose || ''}
-                        onChange={(e) => loadPoseData(e.target.value)}
-                        style={{
-                            padding: '8px 16px',
-                            fontSize: '1em',
-                            margin: '10px',
-                            borderRadius: '4px'
-                        }}
-                    >
-                        <option value="">Select a pose...</option>
-                        {poses.map(pose => (
-                            <option key={pose} value={pose}>
-                                {pose.split('-').map(word =>
-                                    word.charAt(0).toUpperCase() + word.slice(1)
-                                ).join(' ')}
-                            </option>
-                        ))}
-                    </select>
-                </div>
-            </header>
-            <main>
-                {loading ? (
-                    <div className="loading">Loading pose data...</div>
-                ) : (
-                    <PoseTracker selectedPose={poseData} />
-                )}
-            </main>
-        </div>
+        <Router>
+            <div className="App">
+                <Routes>
+                    <Route path="/" element={<HomePage />} />
+                    <Route
+                        path="/login"
+                        element={
+                            user ? (
+                                isNewUser ? (
+                                    <Navigate to="/questionnaire" />
+                                ) : (
+                                    <Navigate to="/yoga" />
+                                )
+                            ) : (
+                                <Login onLogin={handleLogin} onSignup={handleSignup} />
+                            )
+                        }
+                    />
+                    <Route
+                        path="/questionnaire"
+                        element={
+                            !user ? (
+                                <Navigate to="/login" />
+                            ) : !isNewUser ? (
+                                <Navigate to="/yoga" />
+                            ) : (
+                                <UserQuestionnaire onSubmit={handleQuestionnaireSubmit} />
+                            )
+                        }
+                    />
+                    <Route
+                        path="/yoga"
+                        element={
+                            !user ? (
+                                <Navigate to="/login" />
+                            ) : isNewUser && !userPreferences ? (
+                                <Navigate to="/questionnaire" />
+                            ) : (
+                                <PoseTracker userPreferences={userPreferences} />
+                            )
+                        }
+                    />
+                </Routes>
+            </div>
+        </Router>
     );
 }
 

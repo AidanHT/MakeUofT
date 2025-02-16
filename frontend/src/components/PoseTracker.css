@@ -4,6 +4,7 @@
     max-width: 800px;
     margin: 0 auto;
     min-height: 480px;
+    padding: 20px;
 }
 
 .camera-container {
@@ -15,6 +16,7 @@
     background-color: #000;
     border-radius: 8px;
     overflow: hidden;
+    box-shadow: 0 8px 32px rgba(31, 38, 135, 0.15);
 }
 
 .webcam {
@@ -52,4 +54,83 @@
 .error {
     background-color: rgba(255, 0, 0, 0.7);
     max-width: 80%;
+}
+
+.retry-button {
+    margin-top: 10px;
+    padding: 8px 16px;
+    background-color: #4CAF50;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.retry-button:hover {
+    background-color: #45a049;
+    transform: translateY(-2px);
+}
+
+.accuracy-display {
+    position: absolute;
+    top: 20px;
+    left: 20px;
+    background: rgba(0, 0, 0, 0.7);
+    color: white;
+    padding: 15px;
+    border-radius: 5px;
+    font-size: 1.1em;
+    z-index: 1000;
+    max-width: 300px;
+}
+
+.accuracy-overall {
+    margin-bottom: 10px;
+    font-weight: bold;
+    font-size: 1.2em;
+}
+
+.accuracy-segments {
+    font-size: 0.9em;
+}
+
+.accuracy-segment {
+    margin-bottom: 5px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.pose-feedback {
+    margin-top: 15px;
+    padding: 10px;
+    border-top: 1px solid rgba(255, 255, 255, 0.3);
+    font-size: 0.9em;
+}
+
+.feedback-title {
+    font-weight: bold;
+    margin-bottom: 5px;
+    color: #4CAF50;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .pose-tracker {
+        padding: 10px;
+    }
+
+    .camera-container {
+        height: 360px;
+    }
+
+    .accuracy-display {
+        font-size: 1em;
+        padding: 10px;
+    }
+
+    .accuracy-overall {
+        font-size: 1.1em;
+    }
 }
