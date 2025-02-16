@@ -58,9 +58,31 @@ export const signup = async (userData) => {
 
 export const submitQuestionnaire = async (profileData) => {
     try {
-        const response = await api.post('/user/questionnaire', profileData);
+        const response = await api.post('/users/questionnaire', {
+            age: profileData.age,
+            weight: profileData.weight,
+            height: profileData.height,
+            experience: profileData.experience,
+            poseCount: profileData.poseCount,
+            practiceDuration: profileData.practiceDuration,
+            practiceFrequency: profileData.practiceFrequency,
+            focusAreas: profileData.focusAreas
+        });
+
+        // Store preferences in localStorage for immediate access
+        if (response.data.profile) {
+            localStorage.setItem('userPreferences', JSON.stringify({
+                experience: response.data.profile.experience,
+                poseCount: response.data.profile.poseCount,
+                practiceDuration: response.data.profile.practiceDuration,
+                practiceFrequency: response.data.profile.practiceFrequency,
+                focusAreas: response.data.profile.focusAreas
+            }));
+        }
+
         return response.data;
     } catch (error) {
+        console.error('Questionnaire submission error:', error);
         throw error;
     }
 };

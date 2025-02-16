@@ -8,7 +8,16 @@ const router = express.Router();
 // Create or update user profile from questionnaire
 router.post('/questionnaire', auth, async (req, res) => {
     try {
-        const { age, weight, height, experience, poseCount } = req.body;
+        const {
+            age,
+            weight,
+            height,
+            experience,
+            poseCount,
+            practiceDuration,
+            practiceFrequency,
+            focusAreas
+        } = req.body;
 
         // Get user email from the authenticated user
         const user = await User.findById(req.user.userId);
@@ -26,6 +35,9 @@ router.post('/questionnaire', auth, async (req, res) => {
             userProfile.height = height;
             userProfile.experience = experience;
             userProfile.poseCount = poseCount;
+            userProfile.practiceDuration = practiceDuration;
+            userProfile.practiceFrequency = practiceFrequency;
+            userProfile.focusAreas = focusAreas;
         } else {
             // Create new profile
             userProfile = new UserProfile({
@@ -35,7 +47,10 @@ router.post('/questionnaire', auth, async (req, res) => {
                 weight,
                 height,
                 experience,
-                poseCount
+                poseCount,
+                practiceDuration,
+                practiceFrequency,
+                focusAreas
             });
         }
 
@@ -46,6 +61,7 @@ router.post('/questionnaire', auth, async (req, res) => {
             profile: userProfile
         });
     } catch (error) {
+        console.error('Profile update error:', error);
         res.status(400).json({ error: error.message });
     }
 });
@@ -59,6 +75,7 @@ router.get('/profile', auth, async (req, res) => {
         }
         res.json(userProfile);
     } catch (error) {
+        console.error('Profile fetch error:', error);
         res.status(400).json({ error: error.message });
     }
 });

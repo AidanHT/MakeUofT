@@ -43,6 +43,30 @@ const userProfileSchema = new mongoose.Schema({
         min: 1,
         max: 8
     },
+    practiceDuration: {
+        type: Number,
+        required: true,
+        enum: [15, 30, 45, 60],
+        default: 30
+    },
+    practiceFrequency: {
+        type: String,
+        required: true,
+        enum: ['daily', 'weekly', 'occasional'],
+        default: 'weekly'
+    },
+    focusAreas: {
+        type: [String],
+        required: true,
+        validate: {
+            validator: function (areas) {
+                const validAreas = ['Flexibility', 'Strength', 'Balance', 'Mindfulness'];
+                return areas.every(area => validAreas.includes(area));
+            },
+            message: 'Invalid focus area'
+        },
+        default: []
+    },
     createdAt: {
         type: Date,
         default: Date.now

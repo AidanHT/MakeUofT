@@ -12,7 +12,7 @@ const Sidebar = () => {
 
     const handleLogout = () => {
         // Clear all stored data
-        localStorage.removeItem('userToken');
+        localStorage.removeItem('token');
         localStorage.removeItem('userPreferences');
         // Navigate to home page
         navigate('/');

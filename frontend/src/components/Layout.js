@@ -7,7 +7,7 @@ import './Layout.css';
 
 const Layout = ({ userPreferences }) => {
     // Check if user is authenticated
-    const isAuthenticated = localStorage.getItem('userToken');
+    const isAuthenticated = localStorage.getItem('token');
     const storedPreferences = userPreferences || JSON.parse(localStorage.getItem('userPreferences'));
 
     if (!isAuthenticated) {

@@ -12,15 +12,28 @@ function UserQuestionnaire({ onSubmit }) {
         weight: '',
         height: '',
         experience: 'beginner',
-        poseCount: '4'
+        poseCount: '4',
+        practiceDuration: '30',
+        practiceFrequency: 'weekly',
+        focusAreas: []
     });
 
     const handleChange = (e) => {
-        const { name, value } = e.target;
-        setFormData(prev => ({
-            ...prev,
-            [name]: value
-        }));
+        const { name, value, type, checked } = e.target;
+        if (type === 'checkbox') {
+            const updatedAreas = checked
+                ? [...formData.focusAreas, value]
+                : formData.focusAreas.filter(area => area !== value);
+            setFormData(prev => ({
+                ...prev,
+                focusAreas: updatedAreas
+            }));
+        } else {
+            setFormData(prev => ({
+                ...prev,
+                [name]: value
+            }));
+        }
     };
 
     const handleSubmit = async (e) => {
@@ -31,11 +44,14 @@ function UserQuestionnaire({ onSubmit }) {
         try {
             // Convert numeric fields to numbers
             const profileData = {
-                ...formData,
                 age: Number(formData.age),
                 weight: Number(formData.weight),
                 height: Number(formData.height),
-                poseCount: Number(formData.poseCount)
+                experience: formData.experience,
+                poseCount: Number(formData.poseCount),
+                practiceDuration: Number(formData.practiceDuration),
+                practiceFrequency: formData.practiceFrequency,
+                focusAreas: formData.focusAreas
             };
 
             // Submit to backend
@@ -44,8 +60,8 @@ function UserQuestionnaire({ onSubmit }) {
             // Call the parent component's onSubmit with the profile data
             onSubmit(response.profile);
 
-            // Navigate to yoga page
-            navigate('/yoga');
+            // Navigate to practice page
+            navigate('/practice');
         } catch (err) {
             setError(err.toString());
         } finally {
@@ -137,6 +153,55 @@ function UserQuestionnaire({ onSubmit }) {
                                 </option>
                             ))}
                         </select>
+                    </div>
+
+                    <div className="form-group">
+                        <label htmlFor="practiceDuration">Practice Duration (minutes)</label>
+                        <select
+                            id="practiceDuration"
+                            name="practiceDuration"
+                            value={formData.practiceDuration}
+                            onChange={handleChange}
+                            required
+                        >
+                            <option value="15">15</option>
+                            <option value="30">30</option>
+                            <option value="45">45</option>
+                            <option value="60">60</option>
+                        </select>
+                    </div>
+
+                    <div className="form-group">
+                        <label htmlFor="practiceFrequency">Practice Frequency</label>
+                        <select
+                            id="practiceFrequency"
+                            name="practiceFrequency"
+                            value={formData.practiceFrequency}
+                            onChange={handleChange}
+                            required
+                        >
+                            <option value="daily">Daily</option>
+                            <option value="weekly">2-3 times per week</option>
+                            <option value="occasional">Occasional</option>
+                        </select>
+                    </div>
+
+                    <div className="form-group focus-areas">
+                        <label>Focus Areas</label>
+                        <div className="checkbox-group">
+                            {['Flexibility', 'Strength', 'Balance', 'Mindfulness'].map(area => (
+                                <label key={area} className="checkbox-label">
+                                    <input
+                                        type="checkbox"
+                                        name="focusAreas"
+                                        value={area}
+                                        checked={formData.focusAreas.includes(area)}
+                                        onChange={handleChange}
+                                    />
+                                    {area}
+                                </label>
+                            ))}
+                        </div>
                     </div>
 
                     {error && <div className="error-message">{error}</div>}

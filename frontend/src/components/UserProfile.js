@@ -31,43 +31,66 @@ const UserProfile = ({ userPreferences }) => {
     useEffect(() => {
         const fetchUserData = async () => {
             try {
-                const token = localStorage.getItem('userToken');
+                const token = localStorage.getItem('token');
 
-                // Fetch user profile data
-                const profileResponse = await fetch('http://localhost:5000/api/users/profile', {
+                // Fetch user data first
+                const userResponse = await fetch('http://localhost:5000/api/users/profile', {
                     headers: {
-                        'Authorization': `Bearer ${token}`
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
                     }
                 });
 
-                if (!profileResponse.ok) {
-                    throw new Error('Failed to fetch profile data');
+                if (!userResponse.ok) {
+                    throw new Error('Failed to fetch user data');
                 }
 
-                const profileData = await profileResponse.json();
+                const userData = await userResponse.json();
+                console.log('Fetched user data:', userData);
 
                 // Set personal info from user data
                 setPersonalInfo(prev => ({
                     ...prev,
-                    email: profileData.email || '',
-                    username: profileData.username || '',
+                    email: userData.email || '',
+                    username: userData.username || '',
                     currentPassword: '',
                     newPassword: '',
                     confirmPassword: ''
                 }));
 
-                // Set preferences from profile data
-                if (profileData.preferences) {
+                // Fetch profile data
+                const profileResponse = await fetch('http://localhost:5000/api/profile/profile', {
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                if (profileResponse.ok) {
+                    const profileData = await profileResponse.json();
+                    console.log('Fetched profile data:', profileData);
+
+                    // Set preferences from profile data
                     setPreferences({
-                        age: profileData.preferences.age?.toString() || '',
-                        weight: profileData.preferences.weight?.toString() || '',
-                        height: profileData.preferences.height?.toString() || '',
-                        experience: profileData.preferences.experienceLevel || 'beginner',
-                        poseCount: profileData.preferences.poseCount?.toString() || '4',
-                        practiceDuration: profileData.preferences.practiceDuration?.toString() || '30',
-                        practiceFrequency: profileData.preferences.practiceFrequency || 'weekly',
-                        focusAreas: profileData.preferences.focusAreas || []
+                        age: profileData.age?.toString() || '',
+                        weight: profileData.weight?.toString() || '',
+                        height: profileData.height?.toString() || '',
+                        experience: profileData.experience || 'beginner',
+                        poseCount: profileData.poseCount?.toString() || '4',
+                        practiceDuration: userData.preferences?.practiceDuration?.toString() || '30',
+                        practiceFrequency: userData.preferences?.practiceFrequency || 'weekly',
+                        focusAreas: userData.preferences?.focusAreas || []
                     });
+                } else if (profileResponse.status === 404) {
+                    // If profile doesn't exist, use defaults or user preferences
+                    setPreferences(prev => ({
+                        ...prev,
+                        practiceDuration: userData.preferences?.practiceDuration?.toString() || '30',
+                        practiceFrequency: userData.preferences?.practiceFrequency || 'weekly',
+                        focusAreas: userData.preferences?.focusAreas || []
+                    }));
+                } else {
+                    throw new Error('Failed to fetch profile data');
                 }
 
                 setIsLoading(false);
@@ -84,7 +107,7 @@ const UserProfile = ({ userPreferences }) => {
     const handlePersonalInfoSubmit = async (e) => {
         e.preventDefault();
         try {
-            const token = localStorage.getItem('userToken');
+            const token = localStorage.getItem('token');
             const response = await fetch('http://localhost:5000/api/users/profile', {
                 method: 'PUT',
                 headers: {
@@ -100,16 +123,21 @@ const UserProfile = ({ userPreferences }) => {
             });
 
             if (!response.ok) {
-                throw new Error('Failed to update profile');
+                const errorData = await response.json();
+                throw new Error(errorData.error || 'Failed to update profile');
             }
 
-            setEditMode({ ...editMode, personal: false });
+            const updatedData = await response.json();
             setPersonalInfo(prev => ({
                 ...prev,
+                email: updatedData.email || prev.email,
+                username: updatedData.username || prev.username,
                 currentPassword: '',
                 newPassword: '',
                 confirmPassword: ''
             }));
+
+            setEditMode({ ...editMode, personal: false });
         } catch (err) {
             setError(err.message);
         }
@@ -118,24 +146,20 @@ const UserProfile = ({ userPreferences }) => {
     const handlePreferencesSubmit = async (e) => {
         e.preventDefault();
         try {
-            const token = localStorage.getItem('userToken');
+            const token = localStorage.getItem('token');
 
             // Convert string values to numbers where needed
             const updatedPreferences = {
-                name: personalInfo.username, // Include name from personal info
-                experienceLevel: preferences.experience,
-                practiceDuration: parseInt(preferences.practiceDuration),
-                practiceFrequency: preferences.practiceFrequency,
-                focusAreas: preferences.focusAreas,
-                // Additional profile data
+                email: personalInfo.email,
                 age: parseInt(preferences.age),
                 weight: parseInt(preferences.weight),
                 height: parseInt(preferences.height),
+                experience: preferences.experience,
                 poseCount: parseInt(preferences.poseCount)
             };
 
-            // Update preferences
-            const response = await fetch('http://localhost:5000/api/users/preferences', {
+            // Update profile preferences
+            const profileResponse = await fetch('http://localhost:5000/api/profile/questionnaire', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -144,11 +168,49 @@ const UserProfile = ({ userPreferences }) => {
                 body: JSON.stringify(updatedPreferences)
             });
 
-            if (!response.ok) {
-                throw new Error('Failed to update preferences');
+            if (!profileResponse.ok) {
+                const errorData = await profileResponse.json();
+                throw new Error(errorData.error || 'Failed to update profile preferences');
             }
 
-            const data = await response.json();
+            const profileData = await profileResponse.json();
+
+            // Update user preferences
+            const userPreferences = {
+                practiceDuration: parseInt(preferences.practiceDuration),
+                practiceFrequency: preferences.practiceFrequency,
+                focusAreas: preferences.focusAreas
+            };
+
+            const userResponse = await fetch('http://localhost:5000/api/users/preferences', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify(userPreferences)
+            });
+
+            if (!userResponse.ok) {
+                const errorData = await userResponse.json();
+                throw new Error(errorData.error || 'Failed to update user preferences');
+            }
+
+            const userData = await userResponse.json();
+
+            // Update the preferences state with the combined response data
+            setPreferences(prev => ({
+                ...prev,
+                age: profileData.profile.age?.toString() || prev.age,
+                weight: profileData.profile.weight?.toString() || prev.weight,
+                height: profileData.profile.height?.toString() || prev.height,
+                experience: profileData.profile.experience || prev.experience,
+                poseCount: profileData.profile.poseCount?.toString() || prev.poseCount,
+                practiceDuration: userData.preferences.practiceDuration?.toString() || prev.practiceDuration,
+                practiceFrequency: userData.preferences.practiceFrequency || prev.practiceFrequency,
+                focusAreas: userData.preferences.focusAreas || prev.focusAreas
+            }));
+
             setEditMode({ ...editMode, preferences: false });
         } catch (err) {
             setError(err.message);
@@ -254,6 +316,7 @@ const UserProfile = ({ userPreferences }) => {
                             className={!editMode.preferences ? 'readonly' : ''}
                             min="13"
                             max="100"
+                            placeholder="Enter your age"
                         />
                     </div>
                     <div className="form-group">
@@ -266,6 +329,7 @@ const UserProfile = ({ userPreferences }) => {
                             className={!editMode.preferences ? 'readonly' : ''}
                             min="30"
                             max="200"
+                            placeholder="Enter your weight"
                         />
                     </div>
                     <div className="form-group">
@@ -278,6 +342,7 @@ const UserProfile = ({ userPreferences }) => {
                             className={!editMode.preferences ? 'readonly' : ''}
                             min="100"
                             max="250"
+                            placeholder="Enter your height"
                         />
                     </div>
                     <div className="form-group">

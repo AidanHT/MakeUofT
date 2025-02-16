@@ -110,6 +110,32 @@ input[type=number] {
     -moz-appearance: textfield;
 }
 
+.focus-areas {
+    grid-column: 1 / -1;
+}
+
+.checkbox-group {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    padding: 0.5rem 0;
+}
+
+.checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 1.1rem;
+    color: #555;
+    cursor: pointer;
+}
+
+.checkbox-label input[type="checkbox"] {
+    width: 1.2rem;
+    height: 1.2rem;
+    cursor: pointer;
+}
+
 /* Responsive adjustments */
 @media (max-width: 992px) {
     .questionnaire-form {
@@ -119,6 +145,11 @@ input[type=number] {
 
     .questionnaire-box {
         padding: 3rem;
+    }
+
+    .checkbox-group {
+        flex-direction: column;
+        gap: 0.8rem;
     }
 }
 
