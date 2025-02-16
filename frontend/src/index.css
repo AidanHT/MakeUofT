@@ -1,13 +1,126 @@
+:root {
+    /* Color Palette */
+    --primary-color: #4A90E2;
+    --primary-dark: #357ABD;
+    --primary-light: #6BA5E7;
+    --secondary-color: #2ECC71;
+    --accent-color: #9B59B6;
+    --background-color: #F8FAFC;
+    --surface-color: #FFFFFF;
+    --error-color: #E74C3C;
+    --success-color: #27AE60;
+    --text-primary: #2C3E50;
+    --text-secondary: #7F8C8D;
+    --text-light: #BDC3C7;
+    --border-color: #E1E8ED;
+
+    /* Typography */
+    --font-primary: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    --font-heading: 'Poppins', var(--font-primary);
+
+    /* Spacing */
+    --spacing-xs: 0.25rem;
+    --spacing-sm: 0.5rem;
+    --spacing-md: 1rem;
+    --spacing-lg: 1.5rem;
+    --spacing-xl: 2rem;
+
+    /* Border Radius */
+    --border-radius-sm: 4px;
+    --border-radius-md: 8px;
+    --border-radius-lg: 12px;
+
+    /* Shadows */
+    --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.1);
+    --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.1);
+    --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.1);
+}
+
+/* Base Styles */
 body {
     margin: 0;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-        'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
-        sans-serif;
+    padding: 0;
+    font-family: var(--font-primary);
+    background-color: var(--background-color);
+    color: var(--text-primary);
+    line-height: 1.6;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
 }
 
-code {
-    font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
-        monospace;
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    font-family: var(--font-heading);
+    margin: 0 0 var(--spacing-md);
+    color: var(--text-primary);
+    font-weight: 600;
+}
+
+button {
+    cursor: pointer;
+    font-family: var(--font-primary);
+    border: none;
+    background: none;
+    padding: 0;
+    margin: 0;
+}
+
+input,
+select,
+textarea {
+    font-family: var(--font-primary);
+    font-size: 1rem;
+    padding: var(--spacing-sm) var(--spacing-md);
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius-sm);
+    background-color: var(--surface-color);
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+    outline: none;
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.1);
+}
+
+/* Utility Classes */
+.error-message {
+    color: var(--error-color);
+    font-size: 0.875rem;
+    margin-top: var(--spacing-xs);
+}
+
+.success-message {
+    color: var(--success-color);
+    font-size: 0.875rem;
+    margin-top: var(--spacing-xs);
+}
+
+/* Animation Classes */
+.fade-in {
+    animation: fadeIn 0.3s ease-in;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+
+    to {
+        opacity: 1;
+    }
+}
+
+/* Responsive Breakpoints */
+@media (max-width: 768px) {
+    :root {
+        --spacing-lg: 1.25rem;
+        --spacing-xl: 1.75rem;
+    }
 }

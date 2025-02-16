@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { BrowserRouter as Router, Route, Routes, Navigate } from 'react-router-dom';
-import PoseTracker from './components/PoseTracker';
+import Layout from './components/Layout';
 import HomePage from './components/HomePage';
 import Login from './components/Login';
 import UserQuestionnaire from './components/UserQuestionnaire';
@@ -13,9 +13,8 @@ function App() {
 
     const handleLogin = (userData) => {
         setUser(userData);
-        setIsNewUser(false); // Existing users are not new
-        // For existing users, we'll try to load their preferences from the backend
-        // This is a placeholder - you should implement the actual API call
+        setIsNewUser(false);
+        localStorage.setItem('userToken', userData.token);
         setUserPreferences(userData.preferences || {
             experience: 'beginner',
             poseCount: 4
@@ -24,20 +23,31 @@ function App() {
 
     const handleSignup = (userData) => {
         setUser(userData);
-        setIsNewUser(true); // Mark as new user on signup
-        setUserPreferences(null); // New users need to fill out the questionnaire
+        setIsNewUser(true);
+        localStorage.setItem('userToken', userData.token);
+        setUserPreferences(null);
     };
 
     const handleQuestionnaireSubmit = (preferences) => {
         setUserPreferences(preferences);
-        setIsNewUser(false); // Reset new user flag after questionnaire
+        localStorage.setItem('userPreferences', JSON.stringify(preferences));
+        setIsNewUser(false);
     };
 
     return (
         <Router>
             <div className="App">
                 <Routes>
-                    <Route path="/" element={<HomePage />} />
+                    <Route
+                        path="/"
+                        element={
+                            user ? (
+                                <Navigate to="/practice" />
+                            ) : (
+                                <HomePage />
+                            )
+                        }
+                    />
                     <Route
                         path="/login"
                         element={
@@ -45,7 +55,7 @@ function App() {
                                 isNewUser ? (
                                     <Navigate to="/questionnaire" />
                                 ) : (
-                                    <Navigate to="/yoga" />
+                                    <Navigate to="/practice" />
                                 )
                             ) : (
                                 <Login onLogin={handleLogin} onSignup={handleSignup} />
@@ -58,21 +68,22 @@ function App() {
                             !user ? (
                                 <Navigate to="/login" />
                             ) : !isNewUser ? (
-                                <Navigate to="/yoga" />
+                                <Navigate to="/practice" />
                             ) : (
                                 <UserQuestionnaire onSubmit={handleQuestionnaireSubmit} />
                             )
                         }
                     />
+                    {/* Protected routes using Layout */}
                     <Route
-                        path="/yoga"
+                        path="/*"
                         element={
                             !user ? (
                                 <Navigate to="/login" />
                             ) : isNewUser && !userPreferences ? (
                                 <Navigate to="/questionnaire" />
                             ) : (
-                                <PoseTracker userPreferences={userPreferences} />
+                                <Layout userPreferences={userPreferences} />
                             )
                         }
                     />

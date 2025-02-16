@@ -1,0 +1,181 @@
+.signup-container {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: var(--spacing-lg);
+    background: linear-gradient(135deg, var(--primary-light) 0%, var(--primary-dark) 100%);
+}
+
+.signup-content {
+    display: flex;
+    background-color: var(--surface-color);
+    border-radius: var(--border-radius-lg);
+    box-shadow: var(--shadow-lg);
+    width: 100%;
+    max-width: 1200px;
+    min-height: 600px;
+    overflow: hidden;
+    animation: slideUp 0.5s ease-out;
+}
+
+.signup-box {
+    flex: 1;
+    padding: var(--spacing-xl);
+    display: flex;
+    flex-direction: column;
+}
+
+.signup-box h1 {
+    color: var(--text-primary);
+    font-size: 2rem;
+    margin-bottom: var(--spacing-xs);
+    text-align: center;
+}
+
+.subtitle {
+    color: var(--text-secondary);
+    text-align: center;
+    margin-bottom: var(--spacing-xl);
+    font-size: 1.1rem;
+}
+
+.form-group {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-xs);
+    margin-bottom: var(--spacing-md);
+}
+
+.form-group label {
+    color: var(--text-primary);
+    font-weight: 500;
+    font-size: 0.9rem;
+}
+
+.form-group input {
+    padding: var(--spacing-md);
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius-md);
+    transition: all 0.2s ease;
+}
+
+.form-group input:focus {
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.1);
+}
+
+.signup-button {
+    background-color: var(--primary-color);
+    color: white;
+    padding: var(--spacing-md);
+    border-radius: var(--border-radius-md);
+    font-weight: 600;
+    margin-top: var(--spacing-lg);
+    transition: background-color 0.2s ease;
+    width: 100%;
+}
+
+.signup-button:hover {
+    background-color: var(--primary-dark);
+}
+
+.signup-button:disabled {
+    background-color: var(--text-light);
+    cursor: not-allowed;
+}
+
+.login-prompt {
+    text-align: center;
+    margin-top: var(--spacing-lg);
+    color: var(--text-secondary);
+}
+
+.text-button {
+    color: var(--primary-color);
+    font-weight: 600;
+    margin-left: var(--spacing-xs);
+    transition: color 0.2s ease;
+}
+
+.text-button:hover {
+    color: var(--primary-dark);
+}
+
+.benefits-section {
+    flex: 1;
+    padding: var(--spacing-xl);
+    background-color: var(--background-color);
+    display: flex;
+    flex-direction: column;
+}
+
+.benefits-section h2 {
+    color: var(--text-primary);
+    font-size: 1.5rem;
+    margin-bottom: var(--spacing-lg);
+    text-align: center;
+}
+
+.benefits-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-lg);
+}
+
+.benefit-item {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-md);
+    color: var(--text-secondary);
+}
+
+.benefit-item i {
+    color: var(--primary-color);
+    font-size: 1.5rem;
+    width: 2rem;
+    text-align: center;
+}
+
+.benefit-item p {
+    margin: 0;
+    font-size: 1rem;
+    line-height: 1.5;
+}
+
+.error-message {
+    background-color: rgba(231, 76, 60, 0.1);
+    color: var(--error-color);
+    padding: var(--spacing-md);
+    border-radius: var(--border-radius-md);
+    margin-bottom: var(--spacing-md);
+    text-align: center;
+}
+
+@keyframes slideUp {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@media (max-width: 768px) {
+    .signup-content {
+        flex-direction: column;
+        max-width: 100%;
+        min-height: auto;
+    }
+
+    .benefits-section {
+        padding: var(--spacing-lg);
+    }
+
+    .benefits-list {
+        gap: var(--spacing-md);
+    }
+}

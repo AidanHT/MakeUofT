@@ -18,23 +18,41 @@ api.interceptors.request.use((config) => {
     return config;
 });
 
+// Add response interceptor to handle errors
+api.interceptors.response.use(
+    (response) => response,
+    (error) => {
+        if (error.code === 'ERR_NETWORK') {
+            throw new Error('Network Error: Unable to connect to the server');
+        }
+        if (error.response) {
+            throw error.response.data.error || 'An error occurred';
+        }
+        throw error;
+    }
+);
+
 export const login = async (email, password) => {
     try {
         const response = await api.post('/auth/login', { email, password });
-        localStorage.setItem('token', response.data.token);
+        if (response.data.token) {
+            localStorage.setItem('token', response.data.token);
+        }
         return response.data;
     } catch (error) {
-        throw error.response?.data?.error || 'An error occurred';
+        throw error;
     }
 };
 
 export const signup = async (userData) => {
     try {
         const response = await api.post('/auth/signup', userData);
-        localStorage.setItem('token', response.data.token);
+        if (response.data.token) {
+            localStorage.setItem('token', response.data.token);
+        }
         return response.data;
     } catch (error) {
-        throw error.response?.data?.error || 'An error occurred';
+        throw error;
     }
 };
 
@@ -43,7 +61,7 @@ export const submitQuestionnaire = async (profileData) => {
         const response = await api.post('/user/questionnaire', profileData);
         return response.data;
     } catch (error) {
-        throw error.response?.data?.error || 'An error occurred';
+        throw error;
     }
 };
 
@@ -52,7 +70,7 @@ export const getUserProfile = async () => {
         const response = await api.get('/user/profile');
         return response.data;
     } catch (error) {
-        throw error.response?.data?.error || 'An error occurred';
+        throw error;
     }
 };
 

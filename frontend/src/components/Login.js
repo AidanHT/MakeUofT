@@ -45,15 +45,25 @@ function Login({ onLogin, onSignup }) {
                     password: formData.password
                 };
                 response = await signup(signupData);
-                onSignup(response.user);
-                navigate('/questionnaire');
+                if (response.user) {
+                    onSignup(response.user);
+                    navigate('/questionnaire');
+                }
             } else {
                 response = await login(formData.email, formData.password);
-                onLogin(response.user);
-                navigate('/yoga');
+                if (response.user) {
+                    onLogin(response.user);
+                    navigate('/practice');
+                }
             }
         } catch (err) {
-            setError(err.toString());
+            if (err.message && err.message.includes('Network Error')) {
+                setError('Unable to connect to the server. Please make sure the server is running and try again.');
+            } else if (typeof err === 'string' && err.includes('<!DOCTYPE')) {
+                setError('Server connection error. Please try again later.');
+            } else {
+                setError(err.toString());
+            }
         } finally {
             setIsLoading(false);
         }

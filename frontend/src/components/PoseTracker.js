@@ -261,12 +261,17 @@ const PoseTracker = ({ userPreferences }) => {
 
         const initializePose = async () => {
             try {
+                // Create a new Pose instance
                 pose = new Pose({
                     locateFile: (file) => {
                         return `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`;
                     }
                 });
 
+                // Wait for the pose model to be ready
+                await pose.initialize();
+
+                // Configure pose options
                 pose.setOptions({
                     modelComplexity: 1,
                     smoothLandmarks: true,
@@ -289,7 +294,7 @@ const PoseTracker = ({ userPreferences }) => {
                         height: 480
                     });
 
-                    camera.start();
+                    await camera.start();
                     setIsLoading(false);
                 }
             } catch (err) {
@@ -299,9 +304,15 @@ const PoseTracker = ({ userPreferences }) => {
             }
         };
 
-        initializePose();
+        // Initialize pose detection
+        const timeoutId = setTimeout(() => {
+            if (webcamRef.current && webcamRef.current.video) {
+                initializePose();
+            }
+        }, 1000);
 
         return () => {
+            clearTimeout(timeoutId);
             if (camera) {
                 camera.stop();
             }
@@ -368,54 +379,61 @@ const PoseTracker = ({ userPreferences }) => {
 
     return (
         <div className="pose-tracker">
-            {isLoading && (
-                <div className="loading">
-                    <p>Loading pose detector... Please wait a moment.</p>
-                    <p style={{ fontSize: '0.9em', color: '#666' }}>
-                        This may take a few seconds to initialize.
-                    </p>
-                </div>
-            )}
-            {error && (
-                <div className="error">
-                    <p>{error}</p>
-                    <button
-                        onClick={() => window.location.reload()}
-                        className="retry-button"
-                    >
-                        Retry
-                    </button>
-                </div>
-            )}
-            <div className="camera-container">
-                <Webcam
-                    ref={webcamRef}
-                    className="webcam"
-                    mirrored={true}
-                    videoConstraints={videoConstraints}
-                />
-                <canvas ref={canvasRef} className="pose-canvas" />
-                {selectedPose && selectedPose.landmarks && Object.keys(segmentAccuracies).length > 0 && (
-                    <div className="accuracy-display">
-                        <div className="accuracy-overall">
-                            Overall Accuracy: {poseAccuracy}%
-                        </div>
-                        <div className="accuracy-segments">
-                            {Object.entries(segmentAccuracies).map(([segment, data]) => (
-                                <div key={segment} className="accuracy-segment">
-                                    {segment.charAt(0).toUpperCase() + segment.slice(1)}: {Math.round(data.accuracy)}%
-                                </div>
-                            ))}
-                        </div>
-                        {poseFeedback && (
-                            <div className="pose-feedback">
-                                <div className="feedback-title">Instructor Feedback:</div>
-                                {poseFeedback}
+            <div className="pose-header">
+                <h1>Pose Tracking</h1>
+            </div>
+
+            <div className="pose-container">
+                <div className="webcam-section">
+                    <div className="webcam-container">
+                        <Webcam
+                            ref={webcamRef}
+                            videoConstraints={videoConstraints}
+                            style={{ display: 'block' }}
+                            mirrored={true}
+                        />
+                        <canvas ref={canvasRef} />
+                        {isLoading && (
+                            <div className="loading-overlay">
+                                <div>Loading pose detection...</div>
                             </div>
                         )}
                     </div>
-                )}
+                </div>
+
+                <div className="stats-section">
+                    <div className="accuracy-card">
+                        <h3>Overall Accuracy</h3>
+                        <div className="accuracy-value">{poseAccuracy}%</div>
+                    </div>
+
+                    <div className="segment-accuracies">
+                        {Object.entries(segmentAccuracies).map(([segment, data]) => (
+                            <div key={segment} className="segment-item">
+                                <label>{segment.replace(/([A-Z])/g, ' $1').trim()}</label>
+                                <div className="accuracy-bar">
+                                    <div
+                                        className="accuracy-fill"
+                                        style={{ width: `${data.accuracy}%` }}
+                                    />
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+
+                    {poseFeedback && (
+                        <div className="feedback-message">
+                            {poseFeedback}
+                        </div>
+                    )}
+                </div>
             </div>
+
+            {error && (
+                <div className="error-message">
+                    {error}
+                </div>
+            )}
         </div>
     );
 };

@@ -1,195 +1,172 @@
 .login-container {
     min-height: 100vh;
-    width: 100vw;
-    margin: 0;
-    padding: 0;
     display: flex;
-    justify-content: center;
     align-items: center;
-    background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+    justify-content: center;
+    padding: var(--spacing-lg);
+    background: linear-gradient(135deg, var(--primary-light) 0%, var(--primary-dark) 100%);
 }
 
 .login-box {
-    background: white;
-    padding: 5rem;
-    border-radius: 30px;
-    box-shadow: 0 8px 32px rgba(31, 38, 135, 0.15);
-    width: 90%;
+    display: flex;
+    background-color: var(--surface-color);
+    border-radius: var(--border-radius-lg);
+    box-shadow: var(--shadow-lg);
+    width: 100%;
     max-width: 1000px;
-    display: grid;
-    grid-template-columns: 1.2fr 1px 1fr;
-    gap: 4rem;
-    align-items: start;
-    margin: 2rem;
+    min-height: 600px;
+    overflow: hidden;
+    animation: slideUp 0.5s ease-out;
 }
 
 .login-content {
+    flex: 1;
+    padding: var(--spacing-xl);
     display: flex;
     flex-direction: column;
-    align-items: flex-start;
-    text-align: left;
-    max-width: 400px;
 }
 
-.login-box h2 {
-    color: #333;
-    margin-bottom: 1rem;
-    font-size: 3.5rem;
-    text-align: left;
-    line-height: 1.2;
+.login-header {
+    text-align: center;
+    margin-bottom: var(--spacing-xl);
+}
+
+.login-header h2 {
+    color: var(--text-primary);
+    font-size: 2rem;
+    margin-bottom: var(--spacing-xs);
 }
 
 .login-subtitle {
-    color: #666;
-    margin-bottom: 3rem;
-    font-size: 1.3rem;
-    text-align: left;
+    color: var(--text-secondary);
+    font-size: 1.1rem;
+    margin-bottom: var(--spacing-lg);
 }
 
 .login-form {
     display: flex;
     flex-direction: column;
-    gap: 2rem;
-    width: 100%;
+    gap: var(--spacing-md);
 }
 
 .form-group {
     display: flex;
     flex-direction: column;
-    gap: 0.8rem;
+    gap: var(--spacing-xs);
 }
 
 .form-group label {
-    color: #555;
+    color: var(--text-primary);
     font-weight: 500;
-    font-size: 1.2rem;
+    font-size: 0.9rem;
 }
 
 .form-group input {
-    padding: 1rem 1.2rem;
-    border: 2px solid #ddd;
-    border-radius: 12px;
-    font-size: 1.1rem;
-    transition: all 0.3s ease;
-    width: 100%;
+    padding: var(--spacing-md);
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius-md);
+    transition: all 0.2s ease;
 }
 
 .form-group input:focus {
-    outline: none;
-    border-color: #4CAF50;
-    box-shadow: 0 0 0 3px rgba(76, 175, 80, 0.2);
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.1);
 }
 
 .submit-button {
-    background: #4CAF50;
+    background-color: var(--primary-color);
     color: white;
-    padding: 1.2rem;
-    border: none;
-    border-radius: 12px;
-    font-size: 1.3rem;
-    cursor: pointer;
-    transition: all 0.3s ease;
-    margin-top: 2rem;
-    width: 100%;
+    padding: var(--spacing-md);
+    border-radius: var(--border-radius-md);
+    font-weight: 600;
+    margin-top: var(--spacing-md);
+    transition: background-color 0.2s ease;
 }
 
 .submit-button:hover {
-    background: #45a049;
-    transform: translateY(-2px);
-    box-shadow: 0 5px 15px rgba(76, 175, 80, 0.3);
+    background-color: var(--primary-dark);
+}
+
+.submit-button:disabled {
+    background-color: var(--text-light);
+    cursor: not-allowed;
 }
 
 .toggle-form {
     text-align: center;
-    margin-top: 2.5rem;
-    color: #666;
-    font-size: 1.1rem;
+    margin-top: var(--spacing-lg);
+    color: var(--text-secondary);
 }
 
 .toggle-button {
-    background: none;
-    border: none;
-    color: #4CAF50;
-    cursor: pointer;
+    color: var(--primary-color);
     font-weight: 600;
-    font-size: 1.1rem;
-    padding: 0;
-    margin-left: 0.5rem;
-    transition: color 0.3s ease;
+    text-decoration: none;
+    transition: color 0.2s ease;
 }
 
 .toggle-button:hover {
-    color: #45a049;
-    text-decoration: underline;
+    color: var(--primary-dark);
 }
 
 .vertical-divider {
     width: 1px;
-    height: 100%;
-    background: linear-gradient(to bottom, transparent, #ddd, transparent);
+    background-color: var(--border-color);
+    margin: var(--spacing-lg) 0;
 }
 
 .login-info {
-    padding: 2rem;
+    flex: 1;
+    padding: var(--spacing-xl);
+    background-color: var(--background-color);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
 }
 
 .login-info h3 {
-    font-size: 2.2rem;
-    color: #333;
-    margin-bottom: 2rem;
-}
-
-.login-info p {
-    font-size: 1.2rem;
-    color: #666;
-    line-height: 1.8;
-    margin-bottom: 1.5rem;
+    color: var(--text-primary);
+    font-size: 1.5rem;
+    margin-bottom: var(--spacing-md);
 }
 
 .benefits-list {
     list-style: none;
     padding: 0;
-    margin: 2rem 0;
+    margin: var(--spacing-lg) 0;
 }
 
 .benefits-list li {
     display: flex;
     align-items: center;
-    gap: 1rem;
-    font-size: 1.2rem;
-    color: #555;
-    margin-bottom: 1.2rem;
+    margin-bottom: var(--spacing-md);
+    color: var(--text-secondary);
 }
 
 .benefits-list li::before {
     content: "✓";
-    color: #4CAF50;
+    color: var(--success-color);
+    margin-right: var(--spacing-sm);
     font-weight: bold;
-    font-size: 1.4rem;
 }
 
-.error-message {
-    color: #dc3545;
-    background-color: #f8d7da;
-    border: 1px solid #f5c6cb;
-    padding: 0.75rem 1.25rem;
-    margin-top: 1rem;
-    border-radius: 8px;
-    text-align: center;
+@keyframes slideUp {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
 }
 
-.submit-button:disabled {
-    background-color: #8bc34a;
-    cursor: not-allowed;
-    opacity: 0.7;
-}
-
-/* Responsive adjustments */
-@media (max-width: 1200px) {
+@media (max-width: 768px) {
     .login-box {
-        grid-template-columns: 1fr;
-        max-width: 600px;
-        padding: 4rem;
+        flex-direction: column;
+        max-width: 100%;
+        min-height: auto;
     }
 
     .vertical-divider {
@@ -197,42 +174,6 @@
     }
 
     .login-info {
-        display: none;
-    }
-
-    .login-content {
-        max-width: 100%;
-    }
-}
-
-@media (max-width: 768px) {
-    .login-container {
-        padding: 2rem;
-    }
-
-    .login-box {
-        padding: 2.5rem;
-    }
-
-    .login-box h2 {
-        font-size: 2.5rem;
-    }
-
-    .login-subtitle {
-        font-size: 1.1rem;
-    }
-
-    .form-group label {
-        font-size: 1rem;
-    }
-
-    .form-group input {
-        padding: 0.8rem 1rem;
-        font-size: 1rem;
-    }
-
-    .submit-button {
-        padding: 1rem;
-        font-size: 1.1rem;
+        padding: var(--spacing-lg);
     }
 }
